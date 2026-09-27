@@ -1,0 +1,52 @@
+{
+  "name": "cortico-world-cua",
+  "version": "0.1.2",
+  "type": "module",
+  "description": "Cortico World: operate the local desktop — screenshots, mouse, keyboard and windows — with a yield to the user whenever they touch the machine",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pal-AI-Lab/Coopanion.git",
+    "directory": "packages/cortico-world-cua"
+  },
+  "homepage": "https://github.com/Pal-AI-Lab/Coopanion/tree/main/packages/cortico-world-cua#readme",
+  "bugs": {
+    "url": "https://github.com/Pal-AI-Lab/Coopanion/issues"
+  },
+  "keywords": [
+    "cortico-world",
+    "cortico",
+    "computer-use",
+    "desktop-automation"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.5.0",
+  "main": "./src/index.ts",
+  "cortico": {
+    "kind": "world",
+    "api": 5
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jpeg-js": "^0.4.4",
+    "koffi": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

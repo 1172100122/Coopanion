@@ -1,7 +1,7 @@
 # 开发文档
 
 Coopanion 是用 [Cortico](https://github.com/Pal-AI-Lab/Cortico) 组装的 Electron 桌面应用:Cortico Core + Cormini Persona +
-[桌宠 World](https://github.com/Phantivia/cortico-world-desktop-pet) + [电脑操作 World](https://github.com/Phantivia/cortico-world-cua),
+[桌宠 World](../packages/cortico-world-desktop-pet) + [电脑操作 World](../packages/cortico-world-cua),
 模型经 Coo Pet Provider(`packages/cortico-provider-coo`)接 DeepSeek、通义千问、Kimi 等几家服务,默认 DeepSeek。每家一个端点,名字就是它在 `src/vendors.ts` 里的 id;0.1.x 的 `deepseek` 模块端点在启动时由 `core/seed.ts` 改成 `coo`。
 
 ## 从源码构建
@@ -15,7 +15,7 @@ pnpm install
 pnpm run dev                # 准备 build/cortico 并启动应用,数据写在 build/data
 ```
 
-已经 clone 过但没带 `--recursive` 的话,先补上子模块:
+已经 clone 过但没带 `--recursive` 的话,先补上 Cortico 子模块:
 
 ```bash
 git submodule update --init --recursive
@@ -27,8 +27,8 @@ git submodule update --init --recursive
 | `pnpm run start` | 直接启动应用(不重新生成 `build/cortico`) |
 | `pnpm run build:cortico` | 只生成 `build/cortico`(控制台改动后要重跑,并重启应用) |
 | `pnpm run test` | 主仓库单元测试 |
-| `pnpm run test:worlds` | 桌宠与电脑操作子模块测试（使用本仓库锁定的 Cortico） |
-| `pnpm run typecheck:worlds` | 两个 World 子模块的类型检查 |
+| `pnpm run test:worlds` | 桌宠与电脑操作 World 的单元测试（使用本仓库锁定的 Cortico） |
+| `pnpm run typecheck:worlds` | 两个 World 的类型检查 |
 | `pnpm run typecheck` | 检查 Core 与 Electron 部分的类型 |
 | `pnpm run typecheck:web` | 检查控制台的类型(先跑 `build:cortico`) |
 | `pnpm run build:installer` | Windows 上打出 `dist/Coopanion-Setup-<版本>.exe`;Mac 上打出 `dist/Coopanion-<版本>-mac-<架构>.dmg` 和 `.zip`(`PACK_ARCH=x64` 在 Apple 芯片上打 Intel 版) |
@@ -47,7 +47,7 @@ $env:CORTICO_COMPANION_DATA = "$env:TEMP\coo-test"; pnpm run start
 | 目录 | 内容 |
 |---|---|
 | `vendor/cortico` | Cortico 本体(子模块) |
-| `packages/cortico-world-desktop-pet`、`packages/cortico-world-cua` | 两个 World(子模块) |
+| `packages/cortico-world-desktop-pet`、`packages/cortico-world-cua` | 两个 World，源码由本仓库直接管理 |
 | `packages/cortico-provider-coo` | Coo Pet Provider:DeepSeek、千问、Kimi 等几家模型服务的 provider,DeepSeek 排第一 |
 | `core/` | Core 子进程的入口:装配 Cormini、World、provider;首次运行的种子文件;没填 Key 时让桌宠提醒 |
 | `console/` | 覆盖在 Cortico 控制台上的入口:普通/高级两种模式,「开始」「习惯」「装扮」「语音输入」四页 |
@@ -69,6 +69,14 @@ GitHub Actions 会构建 Windows 安装包和两个 Mac 包(Apple 芯片、Intel
 
 - 提 PR 前先跑 `pnpm run test`、`pnpm run test:worlds`、`pnpm run typecheck`、`pnpm run typecheck:web` 和 `pnpm run typecheck:worlds`，CI 也会跑这些检查。
 - 改到用户能看到的行为时,同步更新 [README](../README.md)。
+
+## World 源码来源
+
+两个 World 从子模块转为本仓库的 workspace 包时，保留了原目录、包名和许可证。源码快照分别取自桌宠
+[`7ce70c271add681cbcb19cfebb07c40ac03215e3`](https://github.com/Pal-AI-Lab/cortico-world-desktop-pet/commit/7ce70c271add681cbcb19cfebb07c40ac03215e3)
+和 CUA [`ce44ed7fed92ec06b60df2609808110a73824fe5`](https://github.com/Pal-AI-Lab/cortico-world-cua/commit/ce44ed7fed92ec06b60df2609808110a73824fe5)。
+各包原有 Git 历史仍可从对应仓库查看；此后修改直接提交到 Coopanion。包内独立 lockfile 和 workspace 配置已移除，
+依赖统一由仓库根目录管理。`vendor/cortico` 仍是子模块。
 
 ## 代理、主题与字标
 

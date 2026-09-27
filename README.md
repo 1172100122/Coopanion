@@ -280,7 +280,7 @@ Mac 上点菜单栏里 Coo 的图标 →「显示桌宠」,或者在「应用程
 ## 致谢
 
 Coopanion 由 [Cortico](https://github.com/Pal-AI-Lab/Cortico) 组装而成:Cortico Core + Cormini Persona +
-[桌宠 World](https://github.com/Phantivia/cortico-world-desktop-pet) + [电脑操作 World](https://github.com/Phantivia/cortico-world-cua)。
+[桌宠 World](packages/cortico-world-desktop-pet) + [电脑操作 World](packages/cortico-world-cua)。
 
 ## 许可
 
