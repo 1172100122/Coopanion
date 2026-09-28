@@ -28,7 +28,12 @@ const MAC = process.platform === 'darwin';
 const LINUX = process.platform === 'linux';
 // Linux: X11 (XWayland under a Wayland session). On Wayland a window cannot place itself or stay on top,
 // and the cursor position outside the app's own windows is unknown, which the pet needs.
-if (LINUX) app.commandLine.appendSwitch('ozone-platform', 'x11');
+// Without a usable GPU (virtual machines, some drivers) Chromium no longer falls back to software WebGL on
+// its own, and the whale figure draws with WebGL: allow SwiftShader. It only renders the app's own pages.
+if (LINUX) {
+  app.commandLine.appendSwitch('ozone-platform', 'x11');
+  app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+}
 const APP_ROOT = app.getAppPath();
 const ICONS = join(__dirname, 'icons');
 const DATA = process.env.CORTICO_COMPANION_DATA

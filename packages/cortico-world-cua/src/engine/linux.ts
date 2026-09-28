@@ -1,6 +1,7 @@
 /**
  * Linux (X11) access, the same surface as `win32.ts`: screen capture with XGetImage on the root
- * window, mouse and keyboard through the XTest extension, the window list and the active window
+ * window (where the X server has no picture of the screen, as a rootless XWayland under GNOME or
+ * WSLg, a screenshot tool: grim, spectacle, scrot or ImageMagick's import), mouse and keyboard through the XTest extension, the window list and the active window
  * from the window manager's EWMH properties, the idle time from the MIT-SCREEN-SAVER extension,
  * `xdotool` for typing text and raising a window, and `zenity` for the yes/no dialog.
  *
@@ -9,7 +10,11 @@
  * supported. This module runs only inside the engine child.
  */
 import koffi from 'koffi';
+import jpeg from 'jpeg-js';
 import { execFile, execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { linuxKeysym, zenityAnswer } from './linux-keys.ts';
 
 const x11 = koffi.load('libX11.so.6');
@@ -47,6 +52,7 @@ const XSetErrorHandler = x11.func('void *XSetErrorHandler(XErrorHandler *handler
 const XTestFakeMotionEvent = xtst.func('int XTestFakeMotionEvent(void *dpy, int screen, int x, int y, unsigned long delay)');
 const XTestFakeButtonEvent = xtst.func('int XTestFakeButtonEvent(void *dpy, unsigned int button, int press, unsigned long delay)');
 const XTestFakeKeyEvent = xtst.func('int XTestFakeKeyEvent(void *dpy, unsigned int keycode, int press, unsigned long delay)');
+const XScreenSaverQueryExtension = xss?.func('int XScreenSaverQueryExtension(void *dpy, _Out_ int *event, _Out_ int *error)') ?? null;
 const XScreenSaverQueryInfo = xss?.func('int XScreenSaverQueryInfo(void *dpy, unsigned long d, _Out_ XScreenSaverInfo *info)') ?? null;
 
 const ZPIXMAP = 2, ALL_PLANES = 0xffffffff;
@@ -58,6 +64,7 @@ if (!dpy) throw new Error('连不上 X11 显示(DISPLAY 没有设置?):电脑操
 XSetErrorHandler(koffi.register(() => 0, koffi.pointer(XErrorHandler)));
 const root = XDefaultRootWindow(dpy);
 const screen = XDefaultScreen(dpy);
+const hasIdle = !!XScreenSaverQueryExtension && !!XScreenSaverQueryExtension(dpy, [0], [0]);
 const t0 = Date.now();
 
 export interface Size { width: number; height: number }
@@ -67,15 +74,41 @@ export function screenSize(): Size {
   return { width: XDisplayWidth(dpy, screen), height: XDisplayHeight(dpy, screen) };
 }
 
+/** Screenshot tools that write a JPEG, tried in order when the X server cannot give the picture. */
+const TOOLS: Array<[string, (file: string) => string[]]> = [
+  ['grim', (f) => ['-t', 'jpeg', f]],
+  ['spectacle', (f) => ['-b', '-n', '-f', '-o', f]],
+  ['scrot', (f) => ['-o', f]],
+  ['import', (f) => ['-window', 'root', f]],
+];
+
+function captureWithTool(): { width: number; height: number; bgra: Buffer } {
+  const dir = mkdtempSync(join(tmpdir(), 'cua-shot-'));
+  const file = join(dir, 'screen.jpg');
+  try {
+    for (const [cmd, args] of TOOLS) {
+      try { execFileSync(cmd, args(file), { stdio: 'ignore', timeout: 15_000 }); } catch { continue; }
+      const img = jpeg.decode(readFileSync(file), { useTArray: true, formatAsRGBA: true, maxMemoryUsageInMB: 1024 });
+      const bgra = Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength);
+      for (let i = 0; i < bgra.length; i += 4) { const r = bgra[i]!; bgra[i] = bgra[i + 2]!; bgra[i + 2] = r; }
+      return { width: img.width, height: img.height, bgra };
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  throw new Error('截屏失败:X 服务器给不出屏幕画面(Wayland 下的 XWayland 常见),也没有找到截屏工具。请安装 grim、spectacle、scrot 或 ImageMagick 之一,或者改用 X11 会话');
+}
+
 /** The whole screen as top-down BGRA. */
 export function capture(): { width: number; height: number; bgra: Buffer } {
   const { width, height } = screenSize();
   const ptr = XGetImage(dpy, root, 0, 0, width, height, ALL_PLANES, ZPIXMAP);
-  if (!ptr) throw new Error('截屏失败:XGetImage 没有返回图像');
+  if (!ptr) return captureWithTool();
   try {
     const img = koffi.decode(ptr, XImage) as { data: unknown; bytes_per_line: number; bits_per_pixel: number; byte_order: number };
     if (img.bits_per_pixel !== 32 || img.byte_order !== 0) throw new Error(`截屏失败:不支持的像素格式(${img.bits_per_pixel} 位)`);
-    const src = new Uint8Array(koffi.view(img.data, img.bytes_per_line * height));
+    // a copy: Electron's V8 sandbox does not allow an ArrayBuffer over outside memory (koffi.view)
+    const src = koffi.decode(img.data, koffi.array('uint8_t', img.bytes_per_line * height, 'Typed')) as Uint8Array;
     const bgra = Buffer.alloc(width * height * 4);
     // 32-bit ZPixmap on a little-endian TrueColor visual is B, G, R, unused
     for (let y = 0; y < height; y++) {
@@ -102,7 +135,7 @@ export function tick(): number {
 /** Tick of the last input the X server saw. Without the screen-saver extension: an hour ago, so only pointer moves count. */
 export function lastInputTick(): number {
   const info = { window: 0, state: 0, kind: 0, til_or_since: 0, idle: 0, eventMask: 0 };
-  const idle = XScreenSaverQueryInfo && XScreenSaverQueryInfo(dpy, root, info) ? Number(info.idle) : 3_600_000;
+  const idle = hasIdle && XScreenSaverQueryInfo!(dpy, root, info) ? Number(info.idle) : 3_600_000;
   return (tick() - idle) >>> 0;
 }
 
@@ -175,7 +208,8 @@ function prop(w: number, name: string): number[] | Buffer | null {
   try {
     const count = Number(n[0]);
     if (!count) return null;
-    if (format[0] === 32) return (koffi.decode(data[0], koffi.array('unsigned long', count)) as Array<number | bigint>).map(Number);
+    // decoded as a BigUint64Array: Array.from, since mapping a typed array writes back into it
+    if (format[0] === 32) return Array.from(koffi.decode(data[0], koffi.array('unsigned long', count)) as ArrayLike<number | bigint>, Number);
     if (format[0] === 8) return Buffer.from(koffi.decode(data[0], koffi.array('uint8_t', count)) as number[]);
     return null;
   } finally {
