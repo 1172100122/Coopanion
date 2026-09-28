@@ -27,12 +27,21 @@
 
 ![1790222143546](image/README/1790222143546.png)
 
+## v0.1.6 更新:DeepSeek 大肥鱼
+
+桌宠多了一个形象:**DeepSeek 大肥鱼**,一只 Q 版鲸鱼女仆。打开设置窗口的「装扮」页,最上面一行「形象」里选「DeepSeek 大肥鱼」,屏幕底边的桌宠立刻换成她;选「Coo」换回来。
+
+- **全动态**:她是分件做成的 Live2D 式模型,走、跑、跳、坐下、睡觉、被鼠标拎起来甩、转身、眨眼、跟着鼠标看,十几种表情都有;头发、裙摆、尾巴、鲸鱼鳍和呆毛会跟着动作晃。倾听、点头、打瞌睡时是低头歪头,脚不离地。
+- **八套配色**:DeepSeek(原版)、DeepSeek Harness(纯黑)、ChatGPT、Claude、Gemini、千问、Kimi、MiniMax,每套换成对应厂商标志的配色,围裙上印着那家的标志。在「装扮」页选了大肥鱼以后,下面一行就是配色,点一下渐变过去。
+- Coo 原来的配色和配件都还在,换回 Coo 时照旧。
+
 ## 它能做什么
 
 - **换哪家模型都行**:DeepSeek、通义千问、Kimi、智谱 GLM、豆包、百度千帆、MiniMax、阶跃星辰、OpenRouter,点一下标志、贴上 Key 就能用。
 - **陪你聊天**:快速按一下左 Alt(Mac 是左 Option)、紧接着按住说话,或者直接打字,Coo 在气泡里回你。语音用 FunASR 在你电脑上识别。
 - **记得你**:会记住你们聊过的事,也知道你刚才戳了它、摸了它的头。
 - **帮你动手**:让它帮你点按钮、打字、切窗口。每次动手前它都会先问你。
+- **换个形象**:除了 Coo,还可以换成 **DeepSeek 大肥鱼**:Live2D 式全动态的鲸鱼女仆,八套厂商主题配色。
 - **打扮它**:换配色、帽子、耳饰、眼镜、颈饰,调它的大小和走动习惯。
 - **装新本事**:从扩展页装上 QQ 机器人、画室、小游戏等 World。
 
@@ -171,7 +180,7 @@ Mac:点屏幕顶部菜单栏里 Coo 的图标,是同一份菜单。
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | 开始     | 连接模型、看 Coo 醒着没有、显示桌宠、重看引导。左栏底部是暂停 / 继续。                                                              |
 | 习惯     | 怎么称呼你、走动多少、颜色、大小(拖动时 Coo 跟着变)、音效、悬停按钮                                                                 |
-| 装扮     | 配色、帽子、耳饰、眼镜、颈饰,改动立刻生效                                                                                           |
+| 装扮     | 形象(Coo 或 DeepSeek 大肥鱼);Coo 的配色、帽子、耳饰、眼镜、颈饰,大肥鱼的八套配色。改动立刻生效                                  |
 | 语音输入 | 开关、识别引擎、识别模型下载、说话键暂时不可用时会退回自动收音，按钮显示 AUTO，悬停提示会说明原因；按住说话或按一下开关时显示 KEY。 |
 
 说话键、麦克风、收音方式,还有电平条和听到的内容 |
@@ -284,6 +293,6 @@ Coopanion 由 [Cortico](https://github.com/Pal-AI-Lab/Cortico) 组装而成:Cort
 
 ## 许可
 
-[MIT](LICENSE)。随附或运行时下载的第三方组件:Electron(MIT)、Cortico(MIT)、sherpa-onnx(Apache-2.0)、FunASR 的 SenseVoiceSmall 模型([FunASR 模型开源协议](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE),用时下载)、koffi(MIT)、jpeg-js(BSD-3-Clause)、pnpm(MIT)、各家模型服务的标志取自 [lobe-icons](https://github.com/lobehub/lobe-icons)(MIT;标志本身归各自的公司所有,只用来标明是哪一家服务)。
+[MIT](LICENSE)。DeepSeek 大肥鱼形象的来源与各家标志的说明见[桌宠 World 的第三方声明](packages/cortico-world-desktop-pet/THIRD_PARTY_NOTICES.md)。随附或运行时下载的第三方组件:Electron(MIT)、Cortico(MIT)、sherpa-onnx(Apache-2.0)、FunASR 的 SenseVoiceSmall 模型([FunASR 模型开源协议](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE),用时下载)、koffi(MIT)、jpeg-js(BSD-3-Clause)、pnpm(MIT)、各家模型服务的标志取自 [lobe-icons](https://github.com/lobehub/lobe-icons)(MIT;标志本身归各自的公司所有,只用来标明是哪一家服务)。
 
 装扮编辑器会跟随控制台的明暗主题，桌宠自身配色独立。需要代理时，可在应用启动环境中设置 `HTTP_PROXY` / `HTTPS_PROXY`；本机通信自动绕过代理，详情见[开发文档](docs/DEVELOPMENT.md)。
