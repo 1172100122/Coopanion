@@ -102,7 +102,7 @@ importers:
         specifier: ^0.4.4
         version: 0.4.4
       koffi:
-        specifier: ^3.3.1
+        specifier: 3.3.1
         version: 3.3.1
     devDependencies:
       '@types/node':
@@ -121,7 +121,7 @@ importers:
   packages/cortico-world-desktop-pet:
     dependencies:
       koffi:
-        specifier: ^3.3.1
+        specifier: 3.3.1
         version: 3.3.1
       opencc-js:
         specifier: ^1.4.1
