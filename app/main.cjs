@@ -11,7 +11,8 @@
  *
  * Every file the app writes lives under one data directory: on Windows `<install dir>\data` when
  * packaged (the uninstaller leaves it, and nothing goes to AppData); on macOS
- * `~/Library/Application Support/Coopanion`, since the .app is not a place to write; from
+ * `~/Library/Application Support/Coopanion`, since the .app is not a place to write; on Linux
+ * `~/.config/Coopanion` (an AppImage is mounted read-only, a deb installs under /opt); from
  * source `build/data`; or `CORTICO_COMPANION_DATA`. It holds `home/` (deployment, endpoint,
  * Memory), `extensions/` (Worlds and providers installed from npm), `logs/`, `tmp/` (the process
  * temp directory), `pnpm/` (store and caches for extension installs), and the Chromium profiles.
@@ -20,15 +21,19 @@
  * while the settings window is open, so it can be reached with Command-Tab.
  */
 const { app, BrowserWindow, Menu, Notification, Tray, dialog, nativeImage, shell } = require('electron');
-const { mkdirSync } = require('node:fs');
+const { existsSync, mkdirSync, rmSync, writeFileSync } = require('node:fs');
 const { delimiter, dirname, join } = require('node:path');
 
 const MAC = process.platform === 'darwin';
+const LINUX = process.platform === 'linux';
+// Linux: X11 (XWayland under a Wayland session). On Wayland a window cannot place itself or stay on top,
+// and the cursor position outside the app's own windows is unknown, which the pet needs.
+if (LINUX) app.commandLine.appendSwitch('ozone-platform', 'x11');
 const APP_ROOT = app.getAppPath();
 const ICONS = join(__dirname, 'icons');
 const DATA = process.env.CORTICO_COMPANION_DATA
   || (!app.isPackaged ? join(APP_ROOT, 'build', 'data')
-    : MAC ? join(app.getPath('appData'), 'Coopanion') : join(dirname(process.execPath), 'data'));
+    : MAC || LINUX ? join(app.getPath('appData'), 'Coopanion') : join(dirname(process.execPath), 'data'));
 // before anything asks Electron for a path: the single-instance lock and the profile live in userData
 app.setPath('userData', DATA);
 app.setPath('crashDumps', join(DATA, 'Crashpad'));
@@ -146,6 +151,22 @@ async function ensurePet() {
   if (!state?.connected) await showPet();
 }
 
+/**
+ * Start at login. Electron's login items cover Windows and macOS; on Linux it is an XDG autostart entry
+ * (~/.config/autostart/coopanion.desktop) that runs the AppImage, or the installed executable.
+ */
+const AUTOSTART = join(app.getPath('home'), '.config', 'autostart', 'coopanion.desktop');
+const loginItem = {
+  get: () => (LINUX ? existsSync(AUTOSTART) : app.getLoginItemSettings().openAtLogin),
+  set(on) {
+    if (!LINUX) { app.setLoginItemSettings({ openAtLogin: on, args: ['--background'] }); return; }
+    if (!on) { rmSync(AUTOSTART, { force: true }); return; }
+    const exe = process.env.APPIMAGE || process.execPath;
+    mkdirSync(dirname(AUTOSTART), { recursive: true });
+    writeFileSync(AUTOSTART, `[Desktop Entry]\nType=Application\nName=Coopanion\nExec="${exe}" --background\nX-GNOME-Autostart-enabled=true\n`);
+  },
+};
+
 function buildTray() {
   // macOS: a black template image the menu bar tints to its own color
   const name = MAC ? 'trayTemplate' : 'tray';
@@ -155,12 +176,12 @@ function buildTray() {
   tray = new Tray(icon);
   tray.setToolTip('Coopanion');
   const refresh = () => {
-    const login = app.getLoginItemSettings().openAtLogin;
+    const login = loginItem.get();
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: '打开设置', click: () => openSettings() },
       { label: '显示桌宠', enabled: core.state === 'running', click: () => void showPet() },
       { type: 'separator' },
-      { label: '开机自动启动', type: 'checkbox', checked: login, enabled: app.isPackaged, click: (item) => { app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--background'] }); refresh(); } },
+      { label: '开机自动启动', type: 'checkbox', checked: login, enabled: app.isPackaged, click: (item) => { loginItem.set(item.checked); refresh(); } },
       { label: '重新启动', click: () => void core.restart() },
       { label: '退出', click: () => app.quit() },
     ]));

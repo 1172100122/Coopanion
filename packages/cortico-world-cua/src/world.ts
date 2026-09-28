@@ -332,7 +332,7 @@ export class CuaWorld implements World {
   envPromptVars(): Record<string, string> {
     const s = this.shotSize();
     return {
-      'cua.os': process.platform === 'darwin' ? 'Mac' : 'Windows',
+      'cua.os': process.platform === 'darwin' ? 'Mac' : process.platform === 'linux' ? 'Linux' : 'Windows',
       'cua.keys': process.platform === 'darwin' ? '这是 Mac:复制粘贴、全选、保存用 cmd(cmd+c、cmd+v、cmd+a、cmd+s),切换应用用 cmd+tab。' : '复制粘贴、全选、保存用 ctrl(ctrl+c、ctrl+v、ctrl+a、ctrl+s),切换窗口用 alt+tab。',
       'cua.shot': `${s.width}×${s.height}`,
       'cua.control': this.cfg.control ? '允许操作鼠标和键盘' : '只允许截图和列窗口,不能操作鼠标键盘',

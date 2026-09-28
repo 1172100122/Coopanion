@@ -7,7 +7,8 @@
  * `node_modules/` as real directories.
  *
  * Run: `pnpm run build:installer` (builds build/cortico first). Output: `dist/Coopanion-Setup-<version>.exe` on
- * Windows, `dist/Coopanion-<version>-mac-<arch>.dmg` and `.zip` on a Mac. `PACK_ARCH` (x64 or arm64) builds for
+ * Windows, `dist/Coopanion-<version>-mac-<arch>.dmg` and `.zip` on a Mac, `dist/Coopanion-<version>-linux-x64.AppImage`
+ * and `.deb` on Linux. `PACK_ARCH` (x64 or arm64) builds for
  * another architecture than the machine's: npm installs that architecture's native packages (esbuild, sherpa-onnx) and
  * electron-builder packs that Electron, so one Apple silicon Mac builds both Mac downloads.
  */
@@ -61,5 +62,5 @@ for (const name of WORKSPACE) {
 writeFileSync(join(OUT, 'package.json'), JSON.stringify(manifest, null, 2));
 console.log(`app directory ready: ${relative(ROOT, OUT)}`);
 
-const target = process.platform === 'darwin' ? '--mac' : '--win';
+const target = process.platform === 'darwin' ? '--mac' : process.platform === 'linux' ? '--linux' : '--win';
 run(join(ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'electron-builder.cmd' : 'electron-builder'), [target, `--${ARCH}`, '--publish', 'never', ...process.argv.slice(2)], ROOT);
