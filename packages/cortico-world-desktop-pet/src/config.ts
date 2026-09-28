@@ -23,6 +23,10 @@ export function hoverButtonList(value: string): PetAction[] {
 
 /** Accessory choice as the page's `normalizeSkin` reads it; unknown values fall back to defaults there. */
 export interface PetSkin {
+  /** coo: the built-in figure; whale: the DeepSeek whale maid (web/whale). */
+  figure?: string;
+  /** The whale's colour scheme id (web/whale/model.json). */
+  scheme?: string;
   palette: string;
   head: string;
   side: string;
@@ -94,7 +98,7 @@ export const DESKTOP_PET_DEFAULTS: DesktopPetConfigSection = {
   theme: 'dark',
   hoverButtons: 'chat,voice',
   skin: {
-    palette: 'mint', head: 'none', side: 'none', glasses: 'none', neck: 'none',
+    figure: 'coo', scheme: 'deepseek', palette: 'mint', head: 'none', side: 'none', glasses: 'none', neck: 'none',
     colors: { head: { main: 'body', acc: 'eye' }, side: { main: 'eye', acc: 'eye' }, glasses: { main: 'body', acc: 'eye' }, neck: { main: 'eye', acc: 'eye' } },
   },
   touch: { enabled: true, trigger: 'debounce' },

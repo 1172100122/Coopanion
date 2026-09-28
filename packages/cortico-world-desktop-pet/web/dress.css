@@ -52,11 +52,18 @@ body.dress-page{
 .dot.linked.eye{border-color:var(--skin-eye)}
 .dot[aria-pressed="true"]{box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--text)}
 button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+/* Coo's palette and accessories, or the whale's colour schemes, whichever body is chosen */
+.dress[data-figure="whale"] .coo-only, .dress:not([data-figure="whale"]) .whale-only{display:none}
+.opt img{width:52px; height:52px; display:block; background:var(--swatch-bg); border-radius:6px; object-fit:cover}
+.opt.wide{width:92px}
+.opt.wide span{font-size:11.5px; text-align:center; line-height:1.25}
+.opt.figure{width:116px}
+.opt.figure span{font-size:12.5px; white-space:nowrap}
 @media (max-width:640px){
   .dress-page main{grid-template-columns:1fr}
   .preview{position:relative; top:0; height:220px}
   .dress{grid-template-columns:1fr; gap:6px}
   .dress .row-label{padding-top:6px}
   .opt{width:64px}
-  .opt svg{width:46px; height:46px}
+  .opt svg, .opt img{width:46px; height:46px}
 }
