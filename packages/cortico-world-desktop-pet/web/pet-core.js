@@ -292,14 +292,19 @@ export function mini(face, acc, t = 0, extra = {}) {
 }
 
 /* ---------- skin ---------- */
+/** Bodies the pet can wear: Coo (drawn here) or the DeepSeek whale maid (web/whale, with its colour schemes). */
+export const FIGURES = [['coo', 'Coo'], ['whale', 'DeepSeek 大肥鱼']];
 export function defaultSkin() {
-  return { palette: 'mint', head: 'none', side: 'none', glasses: 'none', neck: 'none', colors: JSON.parse(JSON.stringify(CHANNEL_DEFAULT)) };
+  return { figure: 'coo', scheme: 'deepseek', palette: 'mint', head: 'none', side: 'none', glasses: 'none', neck: 'none', colors: JSON.parse(JSON.stringify(CHANNEL_DEFAULT)) };
 }
 const validColor = (slot, v) => (v === 'eye' || (v === 'body' && !NO_BODY[slot]) || ACC_COLORS.some(c => c.id === v));
 /** Keeps what is valid in `raw`, defaults the rest. */
 export function normalizeSkin(raw) {
   const skin = defaultSkin();
   if (!raw || typeof raw !== 'object') return skin;
+  if (FIGURES.some(([id]) => id === raw.figure)) skin.figure = raw.figure;
+  // the whale's schemes are listed in its model; the pet page falls back to the original for an unknown id
+  if (typeof raw.scheme === 'string' && /^[a-z0-9-]{1,32}$/.test(raw.scheme)) skin.scheme = raw.scheme;
   if (PALETTES.some(p => p.id === raw.palette)) skin.palette = raw.palette;
   for (const slot of SLOTS) if (SLOT_LISTS[slot].some(h => h[0] === raw[slot])) skin[slot] = raw[slot];
   for (const slot of SLOTS) for (const ch of ['main', 'acc']) {
@@ -497,9 +502,16 @@ export const MOTIONS = ['stand', 'jump', 'hop', 'look', 'turn', 'nod', 'shake', 
  * `opts.bounds()` returns { W, H, floorY, S } in stage pixels.
  * `opts.onEvent(kind, detail)` reports what happened to the body: arrived, interrupted, touch, mode.
  * `opts.enter: 'drop'` starts the pet above the top edge, falling to the floor.
+ * `opts.figure`, when given, draws the body instead of the built-in one: `figure.draw(petG, face, frame)` keeps
+ * its own elements inside `petG` (same logo space, feet at y=256). Its frame adds the face's name, the mode,
+ * how long the mode has run, the talk level, drowsiness and how far the body sits.
+ * `figure.groupTilt(mode, tilt, lean)`, if present, returns the rotation (degrees) the whole group gets
+ * instead of tilt + lean; the frame carries tilt, lean and that rotation (groupRot) so the figure can bend the rest.
+ * `figure.colors.z`, if present, colours the sleep z's (otherwise they take the skin's eye colour).
  */
 export function createPet(els, opts) {
   const { petG, shadowEl, fxG } = els;
+  let custom = opts.figure || null;
   const sfx = opts.sfx;
   const onEvent = opts.onEvent || (() => {});
   let W = 0, H = 0, floorY = 0, S = .42, T = 0;
@@ -521,6 +533,9 @@ export function createPet(els, opts) {
   let press = null, strokeAcc = 0, petCool = 0;
   const P = [];
 
+  // points on the body in logo units: where the eyes look from, where tears, z's and hearts start, the bubble's spot
+  const COO_ANCHORS = { gaze: [140, 117], tear: [166, 136], z: [196, 40], hearts: [90, 175, 34], bubble: [146, 0] };
+  let A = { ...COO_ANCHORS, ...custom?.anchors };
   const minX = () => 104 * S + 8, maxX = () => W - 104 * S - 8;
 
   function resize() {
@@ -651,7 +666,7 @@ export function createPet(els, opts) {
   /* particles */
   function emit(type, p, o = {}) { P.push({ type, x: p.x, y: p.y, vx: 0, vy: 0, age: 0, life: 1, ...o }); }
   function emitHeart() {
-    emit('heart', toStage(rnd(90, 175), 34 + pet.low), { vx: rnd(-20, 20), vy: rnd(-70, -45), life: 1.6 });
+    emit('heart', toStage(rnd(A.hearts[0], A.hearts[1]), A.hearts[2] + pet.low), { vx: rnd(-20, 20), vy: rnd(-70, -45), life: 1.6 });
   }
   function dustAt(lx, n, spread) {
     for (let i = 0; i < n; i++) {
@@ -669,7 +684,7 @@ export function createPet(els, opts) {
     pet.blinkT -= dt; pet.blinkAge += dt;
     if (pet.blinkT <= 0) { pet.blinkAge = 0; pet.blinkT = Math.random() < .2 ? .28 : rnd(2.2, 5.2); }
 
-    const head = toStage(140, 117);
+    const head = toStage(A.gaze[0], A.gaze[1]);
     const pdx = pointer.x - head.x, pdy = pointer.y - head.y, pm = Math.hypot(pdx, pdy) || 1;
     const track = () => {
       if (!pointer.inside) {
@@ -880,8 +895,8 @@ export function createPet(els, opts) {
 
     if (fc.emit && T > pet.emitAt) {
       if (fc.emit === 'heart') { emitHeart(); pet.emitAt = T + .45; }
-      if (fc.emit === 'z') { emit('z', toStage(196, 40 + pet.low), { vx: pet.facing * 16, vy: -26, life: 2.4 }); pet.emitAt = T + 1.3; sfx.snore(); }
-      if (fc.emit === 'tear') { emit('drop', toStage(166 + pet.look[0], 136 + pet.low), { vx: pet.facing * rnd(10, 30), vy: -20, life: 3 }); pet.emitAt = T + .8; }
+      if (fc.emit === 'z') { emit('z', toStage(A.z[0], A.z[1] + pet.low), { vx: pet.facing * 16, vy: -26, life: 2.4 }); pet.emitAt = T + 1.3; sfx.snore(); }
+      if (fc.emit === 'tear') { emit('drop', toStage(A.tear[0] + pet.look[0], A.tear[1] + pet.low), { vx: pet.facing * rnd(10, 30), vy: -20, life: 3 }); pet.emitAt = T + .8; }
     }
     strokeAcc *= Math.exp(-dt * 1.5);
     petCool -= dt;
@@ -919,7 +934,9 @@ export function createPet(els, opts) {
     const ax = 128, ay = drag ? 36 : 256;
     let AX = drag ? pet.dx : pet.x, AY = drag ? pet.dy : pet.fy;
     if (fc.shake) AX += Math.sin(T * 60) * 1.4;
-    const kx = S * pet.faceVis * sx, ky = S * sy, rot = pet.tilt + pet.lean * pet.faceVis;
+    // a custom figure may keep tilt and lean off the whole group and bend its own parts instead
+    const kx = S * pet.faceVis * sx, ky = S * sy, lean = pet.lean * pet.faceVis;
+    const rot = custom?.groupTilt ? custom.groupTilt(pet.mode, pet.tilt, lean) : pet.tilt + lean;
     pet.xf = { AX, AY, ax, ay, kx, ky, rot };
     petG.setAttribute('transform', `translate(${f(AX)} ${f(AY)}) rotate(${f(rot)}) scale(${kx.toFixed(4)} ${ky.toFixed(4)}) translate(${-ax} ${-ay})`);
 
@@ -928,8 +945,10 @@ export function createPet(els, opts) {
     let eyes = pet.eyeCur || fc.eyes, eyeClose = 0;
     if (pet.swapAge < .07 && pet.eyePrev) { eyes = pet.eyePrev; eyeClose = pet.swapAge / .07; }
     else if (pet.swapAge < .16) eyeClose = 1 - (pet.swapAge - .07) / .09;
-    petG.innerHTML = figure({ ...fc, eyes, gap: pet.gap.map(g => Math.min(64, g + pet.talkK * 12)), blush: pet.blushK },
-      { look: pet.look, legs, low: pet.low, t: T, blink, eyeClose, acc: skin, swing: pet.swing });
+    const face = { ...fc, eyes, gap: pet.gap.map(g => Math.min(64, g + pet.talkK * 12)), blush: pet.blushK };
+    const frame = { look: pet.look, legs, low: pet.low, t: T, blink, eyeClose, acc: skin, swing: pet.swing };
+    if (custom) custom.draw(petG, face, { ...frame, face: fname, mode: pet.mode, modeT: pet.modeT, talk: pet.talkK, drowse: pet.drowse, sit: pet.sitK, facing: pet.faceVis, tilt: pet.tilt, lean, groupRot: rot });
+    else petG.innerHTML = figure(face, frame);
 
     const footY = drag ? pet.dy + 220 * S * 1.09 : pet.fy;
     const k = clamp(1 - (floorY - footY) / 420, .3, 1);
@@ -939,11 +958,13 @@ export function createPet(els, opts) {
 
     let s = '';
     const sc = S / .48;
+    // sleep z's take the eye colour, or the custom figure's own colour for them
+    const zPaint = custom?.colors?.z ? `stroke="${custom.colors.z}"` : 'class="eye"';
     for (const p of P) {
       const a = p.age / p.life;
       if (p.type === 'z') {
         const op = a < .15 ? a / .15 : 1 - (a - .15) / .85, z = (.7 + .9 * a) * sc;
-        s += `<path class="eye" fill="none" stroke-width="${f(3 / z)}" stroke-linecap="round" stroke-linejoin="round" opacity="${f(op)}" transform="translate(${f(p.x + Math.sin(p.age * 2.5) * 6)} ${f(p.y)}) scale(${f(z)})" d="M-6 -7H6L-6 7H6"/>`;
+        s += `<path ${zPaint} fill="none" stroke-width="${f(3 / z)}" stroke-linecap="round" stroke-linejoin="round" opacity="${f(op)}" transform="translate(${f(p.x + Math.sin(p.age * 2.5) * 6)} ${f(p.y)}) scale(${f(z)})" d="M-6 -7H6L-6 7H6"/>`;
       } else if (p.type === 'heart') {
         s += `<path class="p-heart" fill="none" stroke-width="5" stroke-linejoin="round" opacity="${f(1 - a * a)}" transform="translate(${f(p.x + Math.sin(p.age * 4) * 5)} ${f(p.y)}) scale(${f((.45 + .35 * a) * sc)})" d="${heartD(0, 0, 1)}"/>`;
       } else if (p.type === 'dust') {
@@ -1041,6 +1062,15 @@ export function createPet(els, opts) {
     get time() { return T; },
     get bounds() { return { W, H, floorY, S, minX: minX(), maxX: maxX() }; },
     setSkin(s) { skin = s; },
+    /** Swaps the body's drawing: a custom figure (see `opts.figure`) or null for the built-in Coo. */
+    setFigure(fig) {
+      if (fig === custom) return;
+      custom = fig || null;
+      A = { ...COO_ANCHORS, ...custom?.anchors };
+      petG.textContent = '';
+      render();
+    },
+    get figure() { return custom; },
     get skin() { return skin; },
     setRoam(r) { roam = r; if (r !== 'off') pet.nextAt = T + 1; },
     get roam() { return roam; },
@@ -1050,7 +1080,7 @@ export function createPet(els, opts) {
     setListening(on) { pet.listening = on; if (on && (pet.mode === 'walk' || pet.mode === 'run')) setMode('idle'); },
     setThinking(on) { pet.thinking = on; },
     /** Head top in stage pixels, for placing a speech bubble. */
-    anchor() { return toStage(146, (HEAD_TOP[skin.head] ?? 12) - 8 + pet.low); },
+    anchor() { return toStage(A.bubble[0], (custom ? A.bubble[1] : (HEAD_TOP[skin.head] ?? 12) - 8) + pet.low); },
     emitHeart,
   };
 }

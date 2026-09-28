@@ -1,12 +1,13 @@
 /**
- * Dressing page: palette, four accessory slots and their color channels, with a live preview.
+ * Dressing page: the body (Coo or the DeepSeek whale maid); for Coo the palette, four accessory slots and
+ * their color channels, for the whale her colour schemes; with a live preview.
  * Every change is saved through `POST /api/skin` (the dark/light switch through `POST /api/prefs`);
  * the World persists it and pushes it to the pet window. Changes made elsewhere arrive over
  * `/socket?role=dress`.
  */
 import {
   applyTheme, createPet, createSfx, mini, normalizeSkin, skinCss, wear,
-  PALETTES, HEADS, SIDES, GLASSES, NECKS, ACC_COLORS, LINKED, NO_BODY, ROLES,
+  PALETTES, HEADS, SIDES, GLASSES, NECKS, ACC_COLORS, LINKED, NO_BODY, ROLES, FIGURES,
 } from './pet-core.js';
 
 import { bindAppearance } from './appearance.js';
@@ -51,10 +52,24 @@ function save(path, body) {
     .catch(() => { $('#saved').textContent = '没保存上:连不上桌宠服务'; });
 }
 
+// the whale's figure and scheme list load the first time she is shown
+let whale = null, schemes = null, wanted = 'coo';
+fetch('/web/whale/model.json').then((r) => r.json()).then((m) => { schemes = (m.schemes || []).filter((s) => s.ready !== false); render(); }).catch(() => {});
+async function showFigure(s) {
+  wanted = s.figure;
+  if (s.figure !== 'whale') { ctl.setFigure(null); return; }
+  whale ??= import('./whale/figure.js').then((m) => m.createWhaleFigure(undefined, { scheme: s.scheme }));
+  const fig = await whale;
+  if (wanted !== 'whale') return;
+  await fig.setScheme(s.scheme, { fade: ctl.figure === fig ? .4 : 0, at: ctl.time });
+  ctl.setFigure(fig);
+}
+
 function apply(next, persist) {
   skin = next;
   ctl.setSkin(skin);
   skinStyle.textContent = skinCss(skin);
+  showFigure(skin).catch((err) => console.error(err));
   render();
   if (persist) save('/api/skin', { skin });
 }
@@ -88,7 +103,38 @@ function colorRow(slot, item) {
   return row;
 }
 
+function renderFigure() {
+  $('#dress').dataset.figure = skin.figure;
+  const box = $('#optFigure');
+  box.textContent = '';
+  const opts = el('div', 'opts');
+  for (const [id, label] of FIGURES) {
+    const b = el('button', 'opt wide figure');
+    b.setAttribute('aria-pressed', String(skin.figure === id));
+    const pic = id === 'whale'
+      ? `<img src="/web/whale/thumbs/${skin.scheme}.png" alt="" onerror="this.src='/web/whale/thumbs/deepseek.png'">`
+      : `<svg viewBox="${CROP.palette}" aria-hidden="true">${mini('neutral', skin)}</svg>`;
+    b.innerHTML = `${pic}<span>${label}</span>`;
+    b.addEventListener('click', () => { if (skin.figure === id) return; apply({ ...skin, figure: id }, true); sfx.sparkle(); ctl.setExpr('happy'); });
+    opts.appendChild(b);
+  }
+  box.appendChild(opts);
+  const sch = $('#optScheme');
+  sch.textContent = '';
+  if (!schemes) return;
+  const list = el('div', 'opts');
+  for (const s of schemes) {
+    const b = el('button', 'opt wide');
+    b.setAttribute('aria-pressed', String(skin.scheme === s.id));
+    b.innerHTML = `<img src="/web/whale/thumbs/${s.id}.png" alt=""><span>${s.brand}</span>`;
+    b.addEventListener('click', () => { apply({ ...skin, scheme: s.id }, true); sfx.sparkle(); ctl.setExpr('happy'); ctl.pet.sqv += 1.2; });
+    list.appendChild(b);
+  }
+  sch.appendChild(list);
+}
+
 function render() {
+  renderFigure();
   const pal = $('#optPalette');
   pal.textContent = '';
   const palOpts = el('div', 'opts');

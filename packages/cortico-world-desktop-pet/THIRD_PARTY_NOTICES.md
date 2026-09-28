@@ -22,6 +22,13 @@ FunASR 的 SenseVoiceSmall(FunAudioLLM,通义实验室)经 k2-fsa 转成 sherpa-
 Electron 44.4.4,从 [electron/electron releases](https://github.com/electron/electron/releases/tag/v44.4.4)
 取到 `<运行时根>/electron/44.4.4/`,或使用内嵌应用自带的那份。MIT;其中 Chromium 与依赖各随其许可。
 
+## DeepSeek 大肥鱼形象
+
+`web/whale/` 的贴图由 ChatGPT(OpenAI 的图像模型)按参考图生成后拆件:角色原设为「溟月」(上善无形),
+DeepSeek 女仆装二创参考 ZipZipPipe。围裙上的标志是 DeepSeek、OpenAI、Anthropic(Claude)、Google(Gemini)、
+阿里云(通义千问)、月之暗面(Kimi)、MiniMax 的商标图形,归各自的公司所有,只用来标明配色对应哪一家,
+与这些公司没有关联,也不代表其认可。
+
 ## 其他运行时依赖
 
 - `ws`:MIT

@@ -65,8 +65,21 @@ function connect() {
 }
 connect();
 
+/* ---------- the body: Coo, or the DeepSeek whale maid (web/whale, loaded the first time it is chosen) ---------- */
+let whale = null, wanted = 'coo';
+async function applyFigure(s) {
+  wanted = s.figure;
+  if (s.figure !== 'whale') { ctl.setFigure(null); return; }
+  whale ??= import('./whale/figure.js').then((m) => m.createWhaleFigure(undefined, { scheme: s.scheme }));
+  const fig = await whale;
+  if (wanted !== 'whale') return;
+  // a scheme picked while she is on screen fades in
+  await fig.setScheme(s.scheme, { fade: ctl.figure === fig ? .45 : 0, at: ctl.time });
+  ctl.setFigure(fig);
+}
+
 function applyPrefs(p) {
-  if (p.skin) { const s = normalizeSkin(p.skin); ctl.setSkin(s); skinStyle.textContent = skinCss(s); }
+  if (p.skin) { const s = normalizeSkin(p.skin); ctl.setSkin(s); skinStyle.textContent = skinCss(s); applyFigure(s).catch((err) => console.error(err)); }
   if (p.roam) { prefs.roam = p.roam; ctl.setRoam(p.roam); }
   if (typeof p.sound === 'boolean') { prefs.sound = p.sound; sfx.set(p.sound); }
   if (p.theme === 'dark' || p.theme === 'light') { prefs.theme = p.theme; applyTheme(p.theme); }
