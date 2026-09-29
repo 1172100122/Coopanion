@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-[Cortico](https://github.com/Pal-AI-Lab/Cortico) 的电脑操作 World,一个独立的扩展包:bot 看得见这台电脑(Windows 或 macOS)的主屏幕,
+[Cortico](https://github.com/Pal-AI-Lab/Cortico) 的电脑操作 World,一个独立的扩展包:bot 看得见这台电脑(Windows、macOS 或 Linux)的主屏幕,
 能移动和点击鼠标、滚动、打字、按组合键、列出和切换窗口。使用者一动鼠标键盘,操作就让位。
 [Coopanion](https://github.com/Pal-AI-Lab/Coopanion) 用它让 Coo 帮你操作电脑。
 
@@ -36,12 +36,12 @@ bot 每一轮第一次截图、列窗口或发输入之前,先问使用者这一
 这一轮剩下的调用都不执行,回执写明原因,下一轮再用时重新问。参数不合法的调用在问之前就被拒掉。
 
 怎么问由内嵌应用决定:`cuaDefinition({ askPermission })` 传入一个函数(比如用桌宠的气泡问),返回 `yes` / `no` / `timeout`,
-返回 `null` 表示此刻问不了。没传或返回 `null` 时,弹一个置顶的系统对话框(Windows 上是 `MessageBoxTimeoutW`,macOS 上是 AppleScript 的 `display dialog`)。
+返回 `null` 表示此刻问不了。没传或返回 `null` 时,弹一个置顶的系统对话框(Windows 上是 `MessageBoxTimeoutW`,macOS 上是 AppleScript 的 `display dialog`,Linux 上是 `zenity --question`)。
 
 ## 让位给使用者
 
 发出任何输入前,引擎先确认使用者已经静止 `userIdleMs`(默认 2 秒)。「使用者动过」的依据是两条可以核实的事实:
-系统记录的最后一次输入晚于引擎自己的最后一次注入(Windows 的 `GetLastInputInfo`,macOS 的 `CGEventSourceSecondsSinceLastEventType`),或者鼠标指针不在引擎上次放下的位置。
+系统记录的最后一次输入晚于引擎自己的最后一次注入(Windows 的 `GetLastInputInfo`,macOS 的 `CGEventSourceSecondsSinceLastEventType`,Linux 的 MIT-SCREEN-SAVER 扩展),或者鼠标指针不在引擎上次放下的位置。
 等满 `maxYieldWaitMs`(默认 15 秒)使用者还在用,这次操作不执行,回执照实说明。打字按 16 个字符一段发送,
 每段之间再检查一次,使用者一动就停,回执报告实际打出了几个字。
 
@@ -61,8 +61,11 @@ bot 每一轮第一次截图、列窗口或发输入之前,先问使用者这一
   切到某个窗口所属的应用、弹确认框用 AppleScript。`cua_key` 里的 `cmd` 是 Command 键。
   macOS 要在「系统设置 → 隐私与安全性」里给应用两项权限:「录屏与系统录音」(截图、读窗口标题)和「辅助功能」(鼠标键盘);
   第一次用时系统会问,没给之前工具回执写明去哪里打开。切换应用时 System Events 还会问一次能不能被控制。
+- Linux(`src/engine/linux.ts`,X11 或 Wayland 下的 XWayland):根窗口的 `XGetImage` 截图(无根的 XWayland 给不出画面时,
+  改用 `grim`、`spectacle`、`scrot` 或 ImageMagick 的 `import`);鼠标键盘是 XTest;窗口表和前台窗口来自窗口管理器的 EWMH 属性;
+  打字和切窗口用 `xdotool`,确认框用 `zenity`。XWayland 下只看得到 X11 程序的窗口。
 
-只支持 Windows 和 macOS 的主屏幕;在别的系统上启用会被 `preflight` 拒绝。
+支持 Windows、macOS 和 Linux(X11)的主屏幕;在别的系统上、或 Linux 上没有 `DISPLAY` 时,启用会被 `preflight` 拒绝。
 
 ## 安装
 

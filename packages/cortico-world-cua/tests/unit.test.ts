@@ -6,6 +6,7 @@ import jpeg from 'jpeg-js';
 import { dryMountWorld } from 'cortico/extensions/dry-mount.ts';
 import { parseKeys } from '../src/engine/keys.ts';
 import { appleString, dialogAnswer, macKey, unicodeChunks } from '../src/engine/mac-keys.ts';
+import { linuxKeysym, zenityAnswer } from '../src/engine/linux-keys.ts';
 import { downscale, drawCursor, encodeJpeg, fit } from '../src/engine/image.ts';
 import { CUA } from '../src/definition.ts';
 import { CUA_DEFAULTS } from '../src/config.ts';
@@ -144,5 +145,23 @@ describe('the macOS engine\'s pure parts', () => {
     const chunks = unicodeChunks('a'.repeat(19) + '😀b', 20);
     expect(chunks.map((c) => c.length)).toEqual([19, 3]);
     expect(String.fromCharCode(...chunks[1]!)).toBe('😀b');
+  });
+});
+
+describe('the Linux engine\'s pure parts', () => {
+  it('maps every key cua_key names to an X11 keysym', () => {
+    const r = parseKeys('ctrl+shift+s');
+    expect('chords' in r ? r.chords[0]!.map((k) => linuxKeysym(k.vk)) : []).toEqual([0xffe3, 0xffe1, 0x73]);
+    for (const name of ['enter', 'esc', 'tab', 'backspace', 'delete', 'left', 'pagedown', 'f12', 'f24', ';', '[', "'", 'a', '0', 'printscreen', 'menu', 'win', 'volumeup']) {
+      const k = parseKeys(name);
+      expect('chords' in k && linuxKeysym(k.chords[0]![0]!.vk), name).not.toBeNull();
+    }
+  });
+
+  it('reads the exit code of a zenity question', () => {
+    expect(zenityAnswer(0)).toBe('yes');
+    expect(zenityAnswer(1)).toBe('no');
+    expect(zenityAnswer(5)).toBe('timeout');
+    expect(zenityAnswer(null)).toBe('no');
   });
 });

@@ -1,6 +1,7 @@
 /**
  * The talk key: a hotkey held or pressed anywhere on the desktop, read by polling through koffi:
- * GetAsyncKeyState on Windows, CGEventSourceKeyState / CGEventSourceButtonState on macOS. macOS
+ * GetAsyncKeyState on Windows, CGEventSourceKeyState / CGEventSourceButtonState on macOS,
+ * XQueryKeymap on Linux (X11 or XWayland). macOS
  * reads the keyboard only for an app the person allowed under Privacy & Security → Input
  * Monitoring; the first watch asks for it, and until it is given `watchHotkey` returns why.
  * Elsewhere, or when koffi does not load, `watchHotkey` returns the reason instead of a watcher.
@@ -145,6 +146,58 @@ async function macReader(keys: number[]): Promise<KeyReader | string> {
 }
 
 /**
+ * X11 keysyms for the Windows virtual-key codes `parseHotkey` gives; a code listed with several
+ * keysyms is down when any of their keys is. The middle mouse button is read from the pointer.
+ */
+const LINUX_KEYS: Record<number, number[]> = {
+  0x11: [0xffe3, 0xffe4], 0xa2: [0xffe3], 0xa3: [0xffe4],
+  // right Alt is AltGr (ISO_Level3_Shift) on many layouts
+  0x12: [0xffe9, 0xffea, 0xfe03], 0xa4: [0xffe9], 0xa5: [0xffea, 0xfe03],
+  0x10: [0xffe1, 0xffe2], 0xa0: [0xffe1], 0xa1: [0xffe2],
+  0x5b: [0xffeb, 0xffec], 0x5c: [0xffec],
+  0x20: [0x20], 0x09: [0xff09], 0x14: [0xffe5], 0xc0: [0x60], 0x0d: [0xff0d],
+  0x2d: [0xff63], 0x2e: [0xffff], 0x24: [0xff50], 0x23: [0xff57], 0x21: [0xff55], 0x22: [0xff56],
+  0x13: [0xff13], 0x91: [0xff14],
+};
+const linuxKeysyms = (vk: number): number[] => LINUX_KEYS[vk]
+  ?? (vk >= 0x41 && vk <= 0x5a ? [vk + 0x20] : vk >= 0x30 && vk <= 0x39 ? [vk] : vk >= 0x70 && vk <= 0x87 ? [0xffbe + vk - 0x70] : []);
+/** Button2Mask of XQueryPointer's state: the middle button. The side buttons are not in it. */
+const LINUX_BUTTONS: Record<number, number> = { 0x04: 1 << 9 };
+
+/** The Windows virtual-key codes X11 can read here. */
+export const linuxReadable = (vk: number): boolean => linuxKeysyms(vk).length > 0 || LINUX_BUTTONS[vk] !== undefined;
+
+async function linuxReader(keys: number[]): Promise<KeyReader | string> {
+  if (!keys.every(linuxReadable)) return 'Linux 上读不到这个按键(鼠标侧键不行),换一个说话键';
+  if (!process.env.DISPLAY) return '按键收音在 Linux 上需要 X11(或 XWayland):没有找到 DISPLAY';
+  try {
+    const koffi = (await import('koffi')).default;
+    const x11 = koffi.load('libX11.so.6');
+    const open = x11.func('void *XOpenDisplay(const char *name)') as (name: null) => unknown;
+    const dpy = open(null);
+    if (!dpy) return '按键收音连不上 X11 显示';
+    const keymap = x11.func('int XQueryKeymap(void *dpy, _Out_ uint8_t *keys)') as (d: unknown, out: Uint8Array) => number;
+    const toCode = x11.func('uint8_t XKeysymToKeycode(void *dpy, unsigned long keysym)') as (d: unknown, sym: number) => number;
+    const root = (x11.func('unsigned long XDefaultRootWindow(void *dpy)') as (d: unknown) => number)(dpy);
+    const pointer = x11.func('int XQueryPointer(void *dpy, unsigned long w, _Out_ unsigned long *root, _Out_ unsigned long *child, _Out_ int *rx, _Out_ int *ry, _Out_ int *wx, _Out_ int *wy, _Out_ unsigned int *mask)') as (...a: unknown[]) => number;
+    const codes = new Map(keys.map((vk) => [vk, linuxKeysyms(vk).map((s) => toCode(dpy, s)).filter(Boolean)]));
+    const bits = new Uint8Array(32);
+    // XQueryKeymap is the X server's own key state: under Wayland, XWayland knows it only while an X window has the keyboard
+    return (vk) => {
+      if (LINUX_BUTTONS[vk] !== undefined) {
+        const m = [0];
+        pointer(dpy, root, [0], [0], [0], [0], [0], [0], m);
+        return (m[0]! & LINUX_BUTTONS[vk]!) !== 0;
+      }
+      keymap(dpy, bits);
+      return (codes.get(vk) ?? []).some((c) => (bits[c >> 3]! & (1 << (c & 7))) !== 0);
+    };
+  } catch (err) {
+    return `读不了键盘状态:${(err as Error).message}`;
+  }
+}
+
+/**
  * Longest press that still counts as a tap before the held one. A deliberate tap lasts about
  * 100 ms; a key held for Alt+Tab or a shortcut lasts longer and starts nothing.
  */
@@ -176,7 +229,8 @@ export async function watchHotkey(hotkey: Hotkey, onChange: (down: boolean) => v
   const { keys, taps } = hotkey;
   const reader = process.platform === 'win32' ? await windowsReader()
     : process.platform === 'darwin' ? await macReader(keys)
-    : '按键收音只在 Windows 和 macOS 上可用';
+    : process.platform === 'linux' ? await linuxReader(keys)
+    : '按键收音只在 Windows、macOS 和 Linux 上可用';
   if (typeof reader === 'string') return reader;
   const step = tapTracker(taps, onChange, onTap);
   let down = false;

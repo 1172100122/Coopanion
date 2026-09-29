@@ -108,6 +108,20 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
   const parts = model.parts.map(p => ({ ...p }));
   // the face features ride a little ahead of the face for the turn
   parts.push({ id: 'faceFx', tex: 'faceFx', box: [U(FACE.x), V(FACE.y), FACE.w * S, FACE.h * S], z: 9, parent: 'headFeat', grid: [4, 4] });
+  // the brows lie on the skin under the fringe, and show through the hair: the same texture is drawn
+  // again over the fringe, faint. Each brow lifts and tilts by the face (the warp below splits them).
+  const brows = parts.find(p => p.id === 'brows');
+  if (brows) {
+    deformers.brows = { kind: 'warp', parent: 'headFeat', rect: rectOf('brows') };
+    brows.parent = 'brows';
+    parts.push({ ...brows, id: 'brows_through', z: 13.2, alpha: .4 });
+  }
+  // the lid creases follow each eye's upper lid down when the eye narrows, and go when it closes
+  const creases = parts.find(p => p.id === 'eye_creases');
+  if (creases) {
+    deformers.creases = { kind: 'warp', parent: 'headFeat', rect: rectOf('eye_creases') };
+    creases.parent = 'creases';
+  }
 
   /* ---------- face painting (master pixels) ---------- */
   const faceCv = document.createElement('canvas');
@@ -330,6 +344,24 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     sleepy: [-.7, 0], sleep: [-.9, 0], dizzy: [-.3, 0], dragged: [.6, .6], content: [-.2, .25], listening: [.6, .2],
     thinking: [.1, .15], run: [.2, .4], waking: [-.4, 0], squeeze: [-.3, 0], neutral: [0, .25],
   };
+  // brows by face, in master pixels: [lift of the whole brow, lift of its inner end (by the nose)];
+  // a negative inner lift is the frown
+  const BROW = {
+    surprised: [6, 0], angry: [-1, -5], sad: [1, 5], shy: [1, 2.5], happy: [2, 0], love: [2, 0], wink: [1, 0],
+    sleepy: [-1.5, 0], sleep: [-1.5, 0], dizzy: [1, 3], dragged: [2, 3.5], thinking: [0, 2], waking: [2, 1],
+    listening: [1, 0], content: [-1, 0], squeeze: [-1, -2], run: [1, 0],
+  };
+  const BROW_SPLIT = U(765);  // the near brow is left of this, the far brow right of it
+  let browLift = 0, browInner = 0;
+  // how far an eye's upper lid sits below its rest line (master pixels), and whether it is an open eye at all
+  // (the same openness paintFace gives the eye, over the lid's full travel; the crease keeps a little above the lid)
+  const lidDrop = (e, k, tilt) => {
+    const open = e.shape === 'ring' ? clamp((e.ry ?? 16) / (e.rx ?? 16), 0, 1) * (tilt ? .8 : 1) : e.shape === 'lid' ? clamp(e.ry / 16, 0, 1) : 1;
+    return EYE[k].travel * (1 - open) * .75;
+  };
+  const lidOpen = e => e.shape === 'ring' || e.shape === 'lid' ? 1 : 0;
+  const creaseDrop = [0, 0];
+  let creaseA = 1;
 
   function draw(petG, fc, o) {
     if (mountedIn !== petG || !petG.contains(fo)) mount(petG);
@@ -406,9 +438,9 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     };
     // the sitting skirt breathes a little at its hem, and its front edge swings with the body
     st.skirtSit = { fn: (u, v) => [skirt * 1.5 * v * v, -Math.max(0, breath) * .4 * v] };
-    st.alpha.skirt = 1 - sitIn;
+    st.alpha.skirt = st.alpha.waist_bow_front = 1 - sitIn;
     st.alpha.leg_back = st.alpha.leg_front = 1 - smooth(.42, .52, sitK);
-    st.alpha.skirt_sit = sitIn;
+    st.alpha.skirt_sit = st.alpha.waist_bow_sit_front = sitIn;
     st.armNear = { a: armN };
     st.armFar = { a: armF };
     st.legBack = { a: lerp(legA[0], -55, sitK), ty: -lift[0] * .9 * (1 - sitK) };
@@ -420,6 +452,25 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     st.headFront = { fn: parallax(4.2, 2.8) };
     // the eyes and mouth move with the face: the eyes' outline is shared between the two layers
     st.headFeat = { fn: parallax(2, 1.4) };
+    if (brows) {
+      const [lift, inner] = BROW[face] || [0, 0];
+      browLift = lerp(browLift, lift - 1.5 * (o.blink || 0), ease(14, dt));
+      browInner = lerp(browInner, inner, ease(10, dt));
+      const [bx0, , bx1] = deformers.brows.rect;
+      st.brows = {
+        fn: (u, v, x) => {
+          // 0 at a brow's outer end, 1 at its inner end
+          const k = x < BROW_SPLIT ? clamp((x - bx0) / (BROW_SPLIT - bx0), 0, 1) : clamp((bx1 - x) / (bx1 - BROW_SPLIT), 0, 1);
+          return [0, -(browLift + browInner * k * k) * S];
+        },
+      };
+    }
+    if (creases) {
+      fc.eyes.forEach((e, i) => { creaseDrop[i] = lerp(creaseDrop[i], lidDrop(e, EYES[i], fc.brows), ease(12, dt)); });
+      creaseA = lerp(creaseA, (lidOpen(fc.eyes[0]) + lidOpen(fc.eyes[1])) / 2, ease(12, dt));
+      st.alpha.eye_creases = creaseA;
+      st.creases = { fn: (u, v, x) => [0, (x < BROW_SPLIT ? creaseDrop[0] : creaseDrop[1]) * S] };
+    }
     st.headMid = { fn: parallax(2, 1.4) };
     st.headBack = { fn: parallax(-1.4, -1) };
     // the long hair hangs from the head but its lower half keeps to the body when the head tilts

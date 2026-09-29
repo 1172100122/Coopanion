@@ -12,6 +12,7 @@
   <a href="https://github.com/Pal-AI-Lab/Coopanion/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Pal-AI-Lab/Coopanion/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Windows 10 / 11" src="https://img.shields.io/badge/Windows-10%20%2F%2011-1f6feb">
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-1f6feb">
+  <img alt="Linux x64" src="https://img.shields.io/badge/Linux-x64-1f6feb">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-8b8b8f"></a>
 </p>
 
@@ -23,9 +24,15 @@
   <a href="docs/DEVELOPMENT.md">参与开发</a>
 </p>
 
-桌宠 **Coo** 住在你的屏幕底边。它会用气泡和你聊天、听你说话、在屏幕底边走来走去,也能在你允许时帮你操作电脑。Windows 和 macOS 都能用
+桌宠 **Coo** 住在你的屏幕底边。它会用气泡和你聊天、听你说话、在屏幕底边走来走去,也能在你允许时帮你操作电脑。Windows、macOS 和 Linux 都能用
 
 ![1790222143546](image/README/1790222143546.png)
+
+## v0.1.7 更新:Linux 支持
+
+- **Linux(x64)**:新增 `.deb` 和 `.AppImage` 安装包,见下面[安装](#linux)。桌宠、设置窗口、说话键、FunASR 本地识别、让 Coo 操作电脑都能用;需要 X11 桌面,Wayland 会话下通过 XWayland 运行。
+- **大肥鱼重新分层**:全部部件按「每个部件是一张完整的画」重画了一遍,边缘不再带被遮挡处的切口、锯齿和虚点。脸型照原画收窄,尾巴重画成顺滑的弧线;下巴两侧的卷发、垂在身前的两束长发、左下的回卷、后腰蝴蝶结拆成单独的层,放回原画里它们该在的前后位置。
+- **眉毛和上眼皮**:新增眉毛(隔着刘海也能看到)和双眼皮褶线;眉毛随表情抬起、压低或挑起眉头,褶线跟着眼睛睁闭。惊讶、爱心眼补上了完整眼白。八套配色同步更新。
 
 ## v0.1.6 更新:DeepSeek 大肥鱼
 
@@ -47,7 +54,7 @@
 
 ## 安装
 
-需要 **Windows 10 / 11(64 位)** 或 **macOS 13 以上**(Apple 芯片和 Intel 都行),还需要一家模型服务的 API Key(默认推荐 [DeepSeek](https://platform.deepseek.com/),按用量付费,见[费用与隐私](#费用与隐私))。
+需要 **Windows 10 / 11(64 位)**、**macOS 13 以上**(Apple 芯片和 Intel 都行)或 **64 位 Linux 桌面**(X11,或 Wayland 下的 XWayland),还需要一家模型服务的 API Key(默认推荐 [DeepSeek](https://platform.deepseek.com/),按用量付费,见[费用与隐私](#费用与隐私))。
 安装不需要管理员权限。
 
 ### Windows:下载安装包
@@ -83,9 +90,20 @@ irm https://raw.githubusercontent.com/Pal-AI-Lab/Coopanion/main/installer/instal
 > 麦克风(语音输入)、输入监控(说话键)、录屏与系统录音和辅助功能(让 Coo 操作电脑)。
 > 不想让它碰电脑,后两项不给就行。改了「输入监控」「辅助功能」「录屏」之后要重启 Coopanion 才生效。
 
+### Linux
+
+1. 打开[最新发布](https://github.com/Pal-AI-Lab/Coopanion/releases/latest),下载 `Coopanion-版本号-linux-x64.deb`(Debian / Ubuntu)或 `Coopanion-版本号-linux-x64.AppImage`(其他发行版)。
+2. deb:`sudo apt install ./Coopanion-版本号-linux-x64.deb`,装好后在应用菜单里打开 Coopanion。
+   AppImage:`chmod +x Coopanion-*.AppImage` 后双击或在终端运行;Ubuntu 22.04 以后要先装 `libfuse2`(`sudo apt install libfuse2t64`)。
+3. 桌宠是一个透明、置顶的窗口,需要桌面有窗口合成(GNOME、KDE 等默认都有)。Wayland 会话下它通过 XWayland 运行。
+
+> [!NOTE]
+> Linux 上的数据在 `~/.config/Coopanion`。托盘图标需要桌面支持状态栏图标(GNOME 要装 AppIndicator 扩展);没有托盘时,右键 Coo 打开菜单就能进设置。
+> 让 Coo 操作电脑要用到 `xdotool`(打字、切窗口)和 `zenity`(每轮开始前问你),deb 会自动装上;Wayland 会话下截屏还需要 `grim`、`spectacle`、`scrot` 或 ImageMagick 之一。
+
 ## 快速上手
 
-1. **启动**:Coo 从屏幕顶上掉到底边,任务栏右下角(Mac 是屏幕顶部菜单栏)多一个图标。不会弹出任何窗口。
+1. **启动**:Coo 从屏幕顶上掉到底边,任务栏右下角(Mac 是屏幕顶部菜单栏,Linux 是桌面的状态栏)多一个图标。不会弹出任何窗口。
 2. **跟着引导走**:第一次启动时,Coo 就在屏幕底边冒气泡和你对话,答案直接在气泡里点选或填写:
 
    1. 打个招呼,问你怎么称呼;
@@ -171,6 +189,7 @@ Windows 上也可以换成系统自带的识别,不用下载,但没那么准。
 
 Windows:右键任务栏右下角的托盘图标,可以打开设置、显示桌宠、设为开机自动启动、重新启动或退出;左键单击直接打开设置。
 Mac:点屏幕顶部菜单栏里 Coo 的图标,是同一份菜单。
+Linux:状态栏里 Coo 的图标是同一份菜单,开机自动启动会写进 `~/.config/autostart`。
 
 ## 设置窗口
 
@@ -213,7 +232,7 @@ Mac:点屏幕顶部菜单栏里 Coo 的图标,是同一份菜单。
 
 - **费用**:Coopanion 本身免费。和 Coo 聊天要调用你选的模型服务,费用由那一家按用量从你的账户扣,在「用量与成本」页能看到(内置价目的只有 DeepSeek)。
 - **会发给模型服务的内容**:你说的话和打的字、你和 Coo 的互动,以及电脑操作时的屏幕截图。这些内容只发给你配置的模型服务(默认 DeepSeek)。
-- **留在你电脑上的内容**:API Key、记忆、对话记录、设置、日志,全部存在数据文件夹里(Windows 在安装目录的 `data`,Mac 在 `~/Library/Application Support/Coopanion`)。
+- **留在你电脑上的内容**:API Key、记忆、对话记录、设置、日志,全部存在数据文件夹里(Windows 在安装目录的 `data`,Mac 在 `~/Library/Application Support/Coopanion`,Linux 在 `~/.config/Coopanion`)。
   语音识别在本机完成,不管用 FunASR 还是 Windows 自带的引擎,录音都不会上传,发出去的只有识别出来的文字。
 - **其他联网**:只在你安装扩展(从 npm 下载)或下载语音识别模型(从 ModelScope,取不到时从 Hugging Face)时才会联网。
 
@@ -233,6 +252,8 @@ Windows 上所有数据都在安装目录的 `data` 文件夹里:
 
 Mac 上数据在 `~/Library/Application Support/Coopanion`,里面的分法同上。卸载时把「应用程序」里的 Coopanion 拖进废纸篓;
 彻底不要了,再删掉这个文件夹。
+
+Linux 上数据在 `~/.config/Coopanion`,分法同上。deb 用 `sudo apt remove coopanion` 卸载,AppImage 直接删掉文件;彻底不要了,再删掉这个文件夹。
 
 ## 常见问题
 
@@ -283,7 +304,7 @@ Mac 上点菜单栏里 Coo 的图标 →「显示桌宠」,或者在「应用程
 
 ## 反馈与参与
 
-- 遇到问题或有想法:提一个 [Issue](https://github.com/Pal-AI-Lab/Coopanion/issues),写清楚系统版本(Windows 或 macOS)、Coopanion 版本和复现步骤。
+- 遇到问题或有想法:提一个 [Issue](https://github.com/Pal-AI-Lab/Coopanion/issues),写清楚系统版本(Windows、macOS 或 Linux 发行版)、Coopanion 版本和复现步骤。
 - 想从源码构建或改代码:看 [开发文档](docs/DEVELOPMENT.md)。
 
 ## 致谢

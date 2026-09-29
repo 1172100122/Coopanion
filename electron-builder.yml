@@ -1,5 +1,5 @@
-# Packages build/app (assembled by scripts/pack.ts) into a per-user Windows installer, or a
-# macOS disk image and zip for the architecture of the Mac it is built on.
+# Packages build/app (assembled by scripts/pack.ts) into a per-user Windows installer, a
+# macOS disk image and zip for the architecture of the Mac it is built on, or a Linux AppImage and deb.
 appId: ai.pal.coopanion
 productName: Coopanion
 copyright: Copyright © 2026 Pal-AI-Lab
@@ -50,3 +50,24 @@ mac:
     NSAppleEventsUsageDescription: 操作电脑时,Coo 用它把你指定的应用切到前面。
 dmg:
   writeUpdateInfo: false
+# x64 only. Data goes to ~/.config/Coopanion. The app runs on X11 (XWayland under Wayland, see app/main.cjs);
+# the tray needs a StatusNotifier host (most desktops have one; without it settings open from the pet's menu).
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: app/icons/icon.png
+  category: Utility
+  executableName: coopanion
+  synopsis: 桌面上的 AI 陪伴桌宠
+  maintainer: Pal-AI-Lab <phantivia@gmail.com>
+  # ${arch} would read x86_64 for the AppImage and amd64 for the deb
+  artifactName: Coopanion-${version}-linux-x64.${ext}
+  desktop:
+    entry:
+      StartupWMClass: Coopanion
+deb:
+  # libxtst6/libxss1: the computer-use World's input and idle time; xdotool types text; zenity asks before acting
+  depends: [libgtk-3-0 | libgtk-3-0t64, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0 | libatspi2.0-0t64, libuuid1, libsecret-1-0, libasound2 | libasound2t64, xdotool, zenity]
