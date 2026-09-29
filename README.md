@@ -28,6 +28,10 @@
 
 ![1790222143546](image/README/1790222143546.png)
 
+## v0.1.8 更新:电脑操作的询问分档
+
+- **什么时候先问你**:原来 Coo 每一轮看屏幕或动鼠标键盘前都要问一次。现在高级模式「电脑操作」页多了一项「什么时候先问你」,从严到松四档:`ask-each-turn` 每轮都问(默认,和原来一样);`ask-before-acting` 看屏幕不问,动鼠标键盘前每轮问;`ask-once` 看屏幕不问,动手前问一次,同意后 30 分钟(可调)内不再问;`never-ask` 都不问。改了立即生效。
+
 ## v0.1.7 更新:Linux 支持
 
 - **Linux(x64)**:新增 `.deb` 和 `.AppImage` 安装包,见下面[安装](#linux)。桌宠、设置窗口、说话键、FunASR 本地识别、让 Coo 操作电脑都能用;需要 X11 桌面,Wayland 会话下通过 XWayland 运行。
@@ -99,7 +103,7 @@ irm https://raw.githubusercontent.com/Pal-AI-Lab/Coopanion/main/installer/instal
 
 > [!NOTE]
 > Linux 上的数据在 `~/.config/Coopanion`。托盘图标需要桌面支持状态栏图标(GNOME 要装 AppIndicator 扩展);没有托盘时,右键 Coo 打开菜单就能进设置。
-> 让 Coo 操作电脑要用到 `xdotool`(打字、切窗口)和 `zenity`(每轮开始前问你),deb 会自动装上;Wayland 会话下截屏还需要 `grim`、`spectacle`、`scrot` 或 ImageMagick 之一。
+> 让 Coo 操作电脑要用到 `xdotool`(打字、切窗口)和 `zenity`(问你能不能用电脑),deb 会自动装上;Wayland 会话下截屏还需要 `grim`、`spectacle`、`scrot` 或 ImageMagick 之一。
 
 ## 快速上手
 
@@ -178,6 +182,9 @@ Windows 上也可以换成系统自带的识别,不用下载,但没那么准。
 电脑操作默认开着,但 Coo 每一轮要看屏幕或动鼠标键盘之前,都会冒气泡问你:
 
 - 点「可以」它才动手;选「这次不行」,这一轮它就不动。
+- 嫌问得多,在高级模式左栏「电脑操作」页的「什么时候先问你」里放宽,从严到松四档:
+  `ask-each-turn` 每轮都问(默认);`ask-before-acting` 看屏幕不问,动鼠标键盘前每轮问;
+  `ask-once` 看屏幕不问,动手前问一次,同意后「同意管多久」(默认 30 分钟)内不再问;`never-ask` 都不问。
 - 你一碰鼠标或键盘,它会先停下来等你。
 - 登录、密码、付款这些步骤,它会交给你自己来。
 

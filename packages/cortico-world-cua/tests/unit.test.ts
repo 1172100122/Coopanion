@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +9,7 @@ import { appleString, dialogAnswer, macKey, unicodeChunks } from '../src/engine/
 import { linuxKeysym, zenityAnswer } from '../src/engine/linux-keys.ts';
 import { downscale, drawCursor, encodeJpeg, fit } from '../src/engine/image.ts';
 import { CUA } from '../src/definition.ts';
-import { CUA_DEFAULTS } from '../src/config.ts';
+import { CUA_DEFAULTS, type CuaConfigSection } from '../src/config.ts';
 import { CuaWorld } from '../src/world.ts';
 import { FakeHost } from './helpers/fake-host.ts';
 
@@ -106,6 +106,74 @@ describe('CuaWorld without the engine', () => {
     const w = new CuaWorld({ cfg: structuredClone(CUA_DEFAULTS), timezone: 'Asia/Shanghai', askPermission: async (q) => { asked.push(q); return 'no'; } });
     expect((await call(w, 'cua_click', { x: 5000, y: 10 })).text).toContain('不在截图范围内');
     expect(asked).toEqual([]);
+  });
+
+  describe('permission levels', () => {
+    /** A world whose engine answers every request at once without touching the screen; `asked` collects the questions. */
+    const levelWorld = (permission: CuaConfigSection['permission'], answers: Array<'yes' | 'no'>) => {
+      const cfg = { ...structuredClone(CUA_DEFAULTS), permission, grantMinutes: 30 };
+      cfg.screenshot.afterAction = false;
+      const asked: string[] = [];
+      const w = new CuaWorld({ cfg, timezone: 'Asia/Shanghai', askPermission: async (q) => { asked.push(q); return answers.shift() ?? 'no'; } });
+      // stands in for the engine child: answers each request through the world's own pending table
+      const inner = w as unknown as { spawn: () => unknown; pending: Map<number, { done: (v: unknown) => void; timer: NodeJS.Timeout }> };
+      inner.spawn = () => ({
+        exitCode: null,
+        send({ id, req }: { id: number; req: { op: string } }) {
+          const value = req.op === 'screenshot' ? { jpeg: new Uint8Array(1), width: 10, height: 10, screen: { width: 1920, height: 1080 }, cursor: { x: 0, y: 0 }, foreground: null }
+            : req.op === 'windows' ? [] : { yielded: false, waitedMs: 0, cursor: { x: 0, y: 0 }, foreground: null };
+          const p = inner.pending.get(id)!;
+          inner.pending.delete(id);
+          clearTimeout(p.timer);
+          p.done(value);
+        },
+      });
+      return { w, asked };
+    };
+    const see = (w: CuaWorld) => call(w, 'cua_screenshot', {});
+    const act = (w: CuaWorld) => call(w, 'cua_click', { x: 1, y: 1 });
+
+    it('ask-each-turn asks before the first look of every turn', async () => {
+      const { w, asked } = levelWorld('ask-each-turn', ['yes', 'yes']);
+      expect([(await see(w)).failed, (await act(w)).failed]).toEqual([undefined, undefined]);
+      w.onTurnEnded();
+      await see(w);
+      expect(asked).toHaveLength(2);
+    });
+
+    it('ask-before-acting looks without asking and asks before the first input of every turn', async () => {
+      const { w, asked } = levelWorld('ask-before-acting', ['no', 'yes']);
+      expect((await see(w)).failed).toBeUndefined();
+      expect(asked).toHaveLength(0);
+      expect((await act(w)).text).toContain('没有允许动鼠标键盘');
+      expect((await see(w)).failed).toBeUndefined();
+      w.onTurnEnded();
+      expect((await act(w)).failed).toBeUndefined();
+      expect(asked).toHaveLength(2);
+    });
+
+    it('ask-once holds a yes across turns for grantMinutes, then asks again', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const { w, asked } = levelWorld('ask-once', ['yes', 'yes']);
+        await act(w);
+        w.onTurnEnded();
+        await act(w);
+        expect(asked).toHaveLength(1);
+        expect(asked[0]).toContain('30 分钟');
+        vi.setSystemTime(Date.now() + 31 * 60_000);
+        await act(w);
+        expect(asked).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('never-ask never asks', async () => {
+      const { w, asked } = levelWorld('never-ask', []);
+      expect([(await see(w)).failed, (await act(w)).failed]).toEqual([undefined, undefined]);
+      expect(asked).toEqual([]);
+    });
   });
 
   it('passes the extension dry mount', async () => {

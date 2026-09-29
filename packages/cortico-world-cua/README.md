@@ -30,10 +30,19 @@
 
 操作类工具默认做完等 `screenshot.settleMs`(500 ms)再附一张截图;参数 `screenshot: false` 可以省掉。
 
-## 每一轮先问
+## 什么时候先问
 
-bot 每一轮第一次截图、列窗口或发输入之前,先问使用者这一次能不能用电脑;没同意(拒绝、关掉或 60 秒没回应),
-这一轮剩下的调用都不执行,回执写明原因,下一轮再用时重新问。参数不合法的调用在问之前就被拒掉。
+`permission` 定四档,从严到松:
+
+| 取值 | 看屏幕(截图、列窗口) | 动鼠标键盘 |
+|---|---|---|
+| `ask-each-turn`(默认) | 每一轮第一次之前问 | 同一个回答 |
+| `ask-before-acting` | 不问 | 每一轮第一次之前问 |
+| `ask-once` | 不问 | 问一次,同意后 `grantMinutes`(默认 30)分钟内不再问 |
+| `never-ask` | 不问 | 不问 |
+
+没同意(拒绝、关掉或 60 秒没回应)时,这一轮剩下要问的调用都不执行,回执写明原因,下一轮再用时重新问。
+参数不合法的调用在问之前就被拒掉。档位改了立即生效,环境提示词里的说明跟着换。
 
 怎么问由内嵌应用决定:`cuaDefinition({ askPermission })` 传入一个函数(比如用桌宠的气泡问),返回 `yes` / `no` / `timeout`,
 返回 `null` 表示此刻问不了。没传或返回 `null` 时,弹一个置顶的系统对话框(Windows 上是 `MessageBoxTimeoutW`,macOS 上是 AppleScript 的 `display dialog`,Linux 上是 `zenity --question`)。

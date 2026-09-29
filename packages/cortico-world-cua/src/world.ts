@@ -9,16 +9,17 @@
  * first wait for the user to leave mouse and keyboard alone (`userIdleMs`), up to
  * `maxYieldWaitMs`, and fail without acting if the user keeps going.
  *
- * Every turn asks the person once before the first call that reads the screen or sends
- * input: through `askPermission` when the embedding app gives one (a pet's bubble), else
- * through a system dialog. A refusal stands until the turn ends.
+ * `permission` sets when the person is asked first (config.ts, PERMISSION_LEVELS): at most once
+ * a turn, before the first call that reads the screen or before the first input, or once for
+ * `grantMinutes`, or never. The question goes through `askPermission` when the embedding app gives
+ * one (a pet's bubble), else through a system dialog. A refusal stands until the turn ends.
  */
 import { fork, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { Logger, ToolDef, ToolOutcome, World, WorldConsoleDecl, WorldHost } from 'cortico/core/types.ts';
 import type { Language } from 'cortico/core/language.ts';
 import { childExecArgv } from 'cortico/extensions/runtime.ts';
-import { CUA_CONFIG_GROUP, CUA_ID, type CuaConfigSection } from './config.ts';
+import { CUA_CONFIG_GROUP, CUA_ID, type CuaConfigSection, type PermissionLevel } from './config.ts';
 import { CUA_TOOL_DECLS } from './tools.ts';
 import { fit } from './engine/image.ts';
 import { parseKeys } from './engine/keys.ts';
@@ -59,6 +60,8 @@ export class CuaWorld implements World {
   private engineError: string | null = null;
   /** This turn's answer, asked on first use; cleared when the turn ends. */
   private permission: Promise<Answer> | null = null;
+  /** ask-once: a yes holds until then (ms since epoch). */
+  private grantedUntil = 0;
 
   constructor(private readonly opts: CuaWorldOptions) {
     this.cfg = opts.cfg;
@@ -114,7 +117,7 @@ export class CuaWorld implements World {
   }
 
   private async call<T>(req: EngineRequest): Promise<T> {
-    if (req.op !== 'info' && req.op !== 'confirm') await this.permit();
+    if (req.op !== 'info' && req.op !== 'confirm') await this.permit(req.op === 'screenshot' || req.op === 'windows' ? 'see' : 'act');
     if (!this.engine) { this.engine = this.spawn(); this.engineError = null; }
     const id = ++this.seq;
     const engine = this.engine;
@@ -128,18 +131,33 @@ export class CuaWorld implements World {
 
   /* ---------- permission ---------- */
 
-  private async permit(): Promise<void> {
-    this.permission ??= this.askPermission();
-    const answer = await this.permission;
-    if (answer === 'yes') return;
-    throw new NotPermitted(answer === 'timeout'
-      ? `问了使用者能不能用电脑,${PERMISSION_TIMEOUT_MS / 1000} 秒没有回应,这一轮不能用。`
-      : '使用者这一轮没有允许用电脑。');
+  private get level(): PermissionLevel {
+    const l = this.cfg.permission;
+    return l === 'ask-before-acting' || l === 'ask-once' || l === 'never-ask' ? l : 'ask-each-turn';
   }
 
-  private async askPermission(): Promise<Answer> {
+  private async permit(kind: 'see' | 'act'): Promise<void> {
+    const level = this.level;
+    if (level === 'never-ask') return;
+    if (kind === 'see' && level !== 'ask-each-turn') return;
+    if (level === 'ask-once' && Date.now() < this.grantedUntil) return;
+    this.permission ??= this.askPermission(level);
+    const answer = await this.permission;
+    if (answer === 'yes') {
+      // ask-once: the yes holds for grantMinutes from now, and is asked for again once that runs out
+      if (level === 'ask-once') { this.grantedUntil = Date.now() + this.cfg.grantMinutes * 60_000; this.permission = null; }
+      return;
+    }
+    throw new NotPermitted(answer === 'timeout'
+      ? `问了使用者能不能用电脑,${PERMISSION_TIMEOUT_MS / 1000} 秒没有回应,这一轮不能用。`
+      : `使用者这一轮没有允许${level === 'ask-each-turn' ? '用电脑' : '动鼠标键盘'}。`);
+  }
+
+  private async askPermission(level: PermissionLevel): Promise<Answer> {
     const who = this.opts.botName || 'bot';
-    const question = `${who} 想用你的电脑:看屏幕、动鼠标和键盘。这一次可以吗?`;
+    const question = level === 'ask-each-turn' ? `${who} 想用你的电脑:看屏幕、动鼠标和键盘。这一次可以吗?`
+      : level === 'ask-once' ? `${who} 想动你的鼠标和键盘。接下来 ${this.cfg.grantMinutes} 分钟里都可以吗?`
+        : `${who} 想动你的鼠标和键盘。这一次可以吗?`;
     const viaApp = await this.opts.askPermission?.(question) ?? null;
     if (viaApp) return viaApp;
     return this.call<Answer>({ op: 'confirm', text: question, caption: '电脑操作', timeoutMs: PERMISSION_TIMEOUT_MS });
@@ -337,6 +355,12 @@ export class CuaWorld implements World {
       'cua.shot': `${s.width}×${s.height}`,
       'cua.control': this.cfg.control ? '允许操作鼠标和键盘' : '只允许截图和列窗口,不能操作鼠标键盘',
       'cua.idle': String(Math.round(this.cfg.userIdleMs / 100) / 10),
+      'cua.permission': {
+        'ask-each-turn': '每一轮第一次截图或操作之前,使用者会被问一次能不能用电脑。使用者没同意,这一轮的电脑操作工具都不执行;不要换别的工具绕过去,等使用者开口。',
+        'ask-before-acting': '截图和列窗口不用先问。每一轮第一次动鼠标或键盘之前,使用者会被问一次;使用者没同意,这一轮的输入工具都不执行,截图照常;不要换别的工具绕过去,等使用者开口。',
+        'ask-once': `截图和列窗口不用先问。动鼠标或键盘之前会问使用者一次,同意后 ${this.cfg.grantMinutes} 分钟内不再问;使用者没同意,这一轮的输入工具都不执行,截图照常;不要换别的工具绕过去,等使用者开口。`,
+        'never-ask': '看屏幕和动鼠标键盘都不用先问使用者,工具直接执行。',
+      }[this.level],
     };
   }
 
@@ -348,7 +372,10 @@ export class CuaWorld implements World {
         state: this.engine ? 'online' : this.engineError ? 'error' : 'offline',
         hint: this.engineError ?? (this.engine ? `屏幕 ${this.screen?.width}×${this.screen?.height}` : '按需启动'),
       }],
-      badges: [{ label: '操作', value: this.cfg.control ? '允许' : '只看', tone: this.cfg.control ? 'on' : 'off' }],
+      badges: [
+        { label: '操作', value: this.cfg.control ? '允许' : '只看', tone: this.cfg.control ? 'on' : 'off' },
+        { label: '询问', value: { 'ask-each-turn': '每轮', 'ask-before-acting': '动手前', 'ask-once': `${this.cfg.grantMinutes} 分钟一次`, 'never-ask': '不问' }[this.level], tone: 'plain' },
+      ],
       config: [CUA_CONFIG_GROUP],
       promptDocs: [{
         key: `worlds.${CUA_ID}.envPrompt`,
@@ -362,6 +389,7 @@ export class CuaWorld implements World {
           { name: 'cua.shot', description: '截图尺寸' },
           { name: 'cua.control', description: '是否允许操作鼠标键盘' },
           { name: 'cua.idle', description: '让位时长(秒)' },
+          { name: 'cua.permission', description: '什么时候先问使用者(按 permission 设置)' },
         ],
       }],
     };
