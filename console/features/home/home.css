@@ -38,6 +38,10 @@
 .companion-hoverlbl { font-size: 12px; line-height: 1.3; }
 @media (max-width: 640px) { .companion-row { grid-template-columns: 1fr; gap: 4px; } }
 
+/* 字标下的版本与项目地址;新版本提示沿用上游的 .release-hint */
+.companion-version { display: block; margin-top: 6px; font-size: 11.5px; color: var(--ink-dim); text-decoration: none; }
+.companion-version:hover { color: var(--ink); text-decoration: underline; }
+
 /* 左栏分组之间不画分隔线,只留间距 */
 .navgroup + .navgroup { border-top: 0; padding-top: 0; }
 
