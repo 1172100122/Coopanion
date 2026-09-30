@@ -4,13 +4,14 @@
  * 1. copies `vendor/cortico` without the built-in platform Worlds (minecraft, qq, bilibili,
  *    websearch, the console fixture), the llamacpp provider, the other bots, and repository
  *    tooling; `terminal` stays because the console's chat page talks to it;
- * 2. lays `console/` over `src/web/client/` (the app's entry and home page);
+ * 2. lays `console/` over `src/web/client/` (the app's entry and home page) and writes the app's
+ *    version there as `app-version.ts`, for the release check under the wordmark;
  * 3. builds the console bundle with Cortico's own `buildWeb` and the stylesheet with Tailwind;
  * 4. builds the desktop pet World's panel bundle.
  *
  * Run: `pnpm run build:cortico`. Idempotent; the previous `build/cortico` is replaced.
  */
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -50,6 +51,8 @@ cpSync(VENDOR, OUT, {
 // the staged tree is its own package: ESM, and the runtime dependencies resolve from the app root
 writeFileSync(join(OUT, 'package.json'), JSON.stringify({ name: 'cortico', private: true, type: 'module' }, null, 2));
 cpSync(OVERLAY, join(OUT, 'src', 'web', 'client'), { recursive: true });
+const { version } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string };
+writeFileSync(join(OUT, 'src', 'web', 'client', 'app-version.ts'), `export const APP_VERSION = ${JSON.stringify(version)};\n`);
 console.log(`staged Cortico ${Date.now() - t0} ms`);
 
 const { buildWeb } = await import(pathToFileURL(join(VENDOR, 'scripts', 'build-web.ts')).href) as { buildWeb(root: string): Promise<unknown> };

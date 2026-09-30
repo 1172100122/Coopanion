@@ -11,9 +11,11 @@
  *    the key, saved, tested and made active through the console's own endpoint routes;
  * 4. voice input: the speech model is downloaded with one click when it is missing, then how to
  *    talk, with the talk key as a key cap;
- * 5. where the buttons and the menu are, and where settings live.
+ * 5. where the buttons and the menu are, that Coo's persona is in the settings window's
+ *    「系统提示词」 page, and where settings live.
  *
- * Every step has a close button that ends the introduction. The console's 「使用引导」 runs it
+ * Walked through to the end, it calls `onFinish` with the person's name. Every step has a close
+ * button that ends the introduction. The console's 「使用引导」 runs it
  * again (the World's `pet.guide` panel method). Once it has run, a missing key is asked for in the
  * bubble from time to time (`askForKey`), with the key box right there.
  */
@@ -79,6 +81,8 @@ const S = {
   gotIt: '知道了',
   buttons: '鼠标停在我身上,旁边会冒出几个按钮;右键我能打开菜单,暂停、设置和退出都在里面。',
   ok: '好',
+  persona: '我是什么性子、怎么说话,都写在设置窗口的「系统提示词」页里。想让我换个样子,可以去那里改;直接告诉我也行,我自己来改。',
+  personaOk: '明白了',
   finish: MAC
     ? '都准备好啦!菜单栏里也有我的图标,想改设置点它就行。'
     : process.platform === 'linux'
@@ -106,6 +110,8 @@ export interface GuideDeps {
   doneFile: string;
   /** Shows the dressing page (in the settings window). */
   openDress: () => void;
+  /** The introduction was walked through to the end (not closed early); `name` is what the person is called. */
+  onFinish?: (name: string) => void;
 }
 
 /** Ended with the close button: the rest is skipped. */
@@ -281,8 +287,10 @@ export async function runGuide(deps: GuideDeps): Promise<void> {
 
     // 5 the buttons, the menu, and where settings live
     await step(5, { text: S.buttons, actions: ['wink'], input: { kind: 'buttons', options: [{ label: S.ok, primary: true }] } });
+    await step(5, { text: S.persona, marks: ['系统提示词'], actions: ['happy'], input: { kind: 'buttons', options: [{ label: S.personaOk, primary: true }] } });
     const end = await step(5, { text: S.finish, actions: ['happy'], input: { kind: 'buttons', options: [{ label: S.go, primary: true }, { label: S.dress }] } });
     markDone(deps.doneFile);
+    deps.onFinish?.(name);
     if ('index' in end && end.index === 1) deps.openDress();
   } catch (err) {
     if (!(err instanceof Closed)) throw err;

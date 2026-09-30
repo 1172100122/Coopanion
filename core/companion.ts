@@ -12,7 +12,10 @@
  * First start writes the files in `seed.ts`; after that every value is the operator's, edited in
  * the console. While the active endpoint has no key, event delivery starts paused. The first start
  * runs the introduction (`guide.ts`) in the pet's bubble, the key box included; after it, the pet
- * asks for a missing key in its bubble now and then, for as long as no key is set.
+ * asks for a missing key in its bubble now and then, for as long as no key is set. An introduction
+ * walked through to the end tells Coo so in an internal event (`guideFinished`): the persona, the
+ * names and the rest are now its to settle with the person, and the prompt page is where both of
+ * them edit it.
  *
  * The parent (Electron main) gets `{ type: 'companion:ready', port, dataDir, keyMissing }` once the
  * console listens, `{ type: 'companion:open', path }` to show the settings window at a console
@@ -59,6 +62,20 @@ const ASK_AFTER_GUIDE_MS = 20 * 60_000;
 const GUIDE_FILE = 'guide.json';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const GUIDE_FINISHED = (name: string) => [
+  `[启动引导] ${name}刚在你的气泡里走完了启动引导:定了你怎么称呼对方(「${name}」)、你平时活泼到什么程度、用哪家模型服务,也看过了怎么语音输入、按钮和菜单在哪。`,
+  `接下来可以和${name}商量你们之间的设定:你的性格和说话方式、你怎么称呼对方、对方想怎么叫你、希望你平时做什么不做什么。`,
+  '- 你的人设是工作区里的 CONSTITUTION.md,每次开新 session 都放进你的系统前缀。商量出结果后你可以自己改它,下一次 session 生效。',
+  '- 对方的称呼是设置窗口「习惯」页的「怎么称呼你」,由对方自己改;商量好的称呼和其他偏好可以记进你的工作区。',
+  '- 设置窗口的「系统提示词」页能看到并编辑你的整份系统提示词,CONSTITUTION 也在里面。可以引导对方去那里按自己的喜好改;对方想改什么,你也可以替对方改。',
+  '不用一次说完,看对方的兴致。',
+].join('\n');
+
+/** Tells Coo the introduction was walked through; delivered with the next batch (after the key is set, while events are held without one). */
+function guideFinished(bus: WakeBus, name: string): void {
+  bus.push({ deferred: { type: 'companion.guide-finished', source: 'companion', origin: 'internal', render: () => GUIDE_FINISHED(name) } });
+}
 
 /** Notes the person talking to Coo on the bus; the returned check reports it once and resets. */
 function watchTalk(bus: WakeBus): () => boolean {
@@ -164,6 +181,7 @@ export async function main(): Promise<void> {
     console: `http://127.0.0.1:${port}`,
     doneFile: join(deployDir, GUIDE_FILE),
     openDress: () => process.send?.({ type: 'companion:open', path: '#/dress' }),
+    onFinish: (name) => guideFinished(bot.core.bus, name),
   };
   guide = guideDeps;
   void introduce(guideDeps, () => hasKey(loaded.config), keyMissing ? watchTalk(bot.core.bus) : null).catch((err) => {
