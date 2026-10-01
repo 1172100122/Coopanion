@@ -177,17 +177,22 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     fg.restore();
   }
 
+  // Each mouth sprite sits where its expression edit drew it, and three of those edits drew the mouth
+  // higher than the master's: these move them down (master pixels) so the middle of each visible mouth
+  // is on the master's mouth line, y 769, as the neutral, love, dizzy and surprised mouths already are.
+  const MOUTH_DY = { happy_mouth: 9, drag_mouth: 16, sleep_mouth: 4 };
+
   /** A whole drawn sprite (an expression's eye or mouth) at its place, optionally scaled/rotated about its centre. */
   function sprite(name, o = {}) {
     const b = feat.sprites[name];
     if (!b) return;
-    const cx = (b[0] + b[2]) / 2 + (o.dx || 0), cy = (b[1] + b[3]) / 2 + (o.dy || 0);
+    const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
     fg.save();
     fg.globalAlpha = o.alpha ?? 1;
-    fg.translate(cx - FACE.x, (o.anchorTop ? b[1] : cy) - FACE.y);
+    fg.translate(cx - FACE.x, cy + (MOUTH_DY[name] || 0) - FACE.y);
     if (o.rot) fg.rotate(o.rot);
     fg.scale(o.sx ?? o.s ?? 1, o.sy ?? o.s ?? 1);
-    fg.drawImage(img[name], b[0] - cx, (o.anchorTop ? 0 : b[1] - cy));
+    fg.drawImage(img[name], b[0] - cx, b[1] - cy);
     fg.restore();
   }
 
@@ -247,12 +252,12 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
         case 'spiral': sprite(`dizzy_${k}`, { rot: (e.rot || 0) * .6 }); break;
       }
     });
-    // mouth: talking opens the happy mouth from its top edge; otherwise the face's own
+    // mouth: talking opens the happy mouth about its middle, which stays on the mouth line; otherwise the face's own
     const talk = o.talk || 0;
     const gapOpen = clamp((Math.max(fc.gap[0], fc.gap[1]) - 50) / 14, 0, 1);
     const m = MOUTH[face] ?? 'neutral_mouth';
     const open = Math.max(talk * (.45 + .45 * Math.abs(Math.sin(t * 17))), face === 'sleepy' || face === 'waking' ? gapOpen : 0);
-    if (open > .12) sprite(face === 'surprised' ? 'surprised_mouth' : 'happy_mouth', { anchorTop: true, sy: .35 + .65 * open, sx: .85 + .15 * open });
+    if (open > .12) sprite(face === 'surprised' ? 'surprised_mouth' : 'happy_mouth', { sy: .35 + .65 * open, sx: .85 + .15 * open });
     else if (typeof m === 'number') lineMouth(m);
     else if (Array.isArray(m)) sprite(m[0], { s: m[1] });
     else sprite(m);
