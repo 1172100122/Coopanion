@@ -13,17 +13,14 @@ export const DISPLAY_NAME = 'Coo';
 export const MODULE = 'coo';
 /** The module the endpoints of versions up to 0.1.2 name; it became `coo`. */
 const OLD_MODULE = 'deepseek';
-/** The name version 0.1.0 seeded. */
-const OLD_DISPLAY_NAME = '可缇';
 /** SHA-256 of the self-description versions 0.1.0 (after the rename) and 0.1.1 seeded, line endings as LF. */
 const OLD_CONSTITUTION = 'cfcb7527cbf3518ab9f077ee711c86661a70613b9e5caeb992b30a603490e5cf';
 export const SEED_DIR = fileURLToPath(new URL('./seed/', import.meta.url));
 
 /**
  * Writes the first-run files that are missing; existing files are left as the operator made them,
- * except the old seeded name, which becomes Coo in the config and in the self-description, a
- * self-description still exactly as an older version seeded it, which becomes the current one, and
- * endpoints of the old `deepseek` module, which now belong to `coo`.
+ * except a self-description still exactly as an older version seeded it, which becomes the current
+ * one, and endpoints of the old `deepseek` module, which now belong to `coo`.
  */
 export function seed(home: string): void {
   const deploy = join(home, DEPLOYMENT);
@@ -52,7 +49,6 @@ export function seed(home: string): void {
   if (!existsSync(join(workspace, 'CONSTITUTION.md'))) copyFileSync(join(SEED_DIR, 'CONSTITUTION.md'), join(workspace, 'CONSTITUTION.md'));
   // the console shows it as the bot's avatar
   if (!existsSync(join(deploy, 'avatar.png'))) copyFileSync(join(SEED_DIR, 'avatar.png'), join(deploy, 'avatar.png'));
-  renameOldSeed(deploy, workspace);
   upgradeSeededConstitution(workspace);
   moveEndpointsToCoo(join(home, 'providers'));
 }
@@ -65,20 +61,6 @@ function moveEndpointsToCoo(providers: string): void {
     if (config.kind !== OLD_MODULE) continue;
     config.kind = MODULE;
     writeFileSync(file, JSON.stringify(config, null, 2) + '\n');
-  }
-}
-
-function renameOldSeed(deploy: string, workspace: string): void {
-  const configFile = join(deploy, 'config.json');
-  const config = JSON.parse(readFileSync(configFile, 'utf8')) as { displayName?: string };
-  if (config.displayName === OLD_DISPLAY_NAME) {
-    config.displayName = DISPLAY_NAME;
-    writeFileSync(configFile, JSON.stringify(config, null, 2) + '\n');
-  }
-  const constitution = join(workspace, 'CONSTITUTION.md');
-  const text = readFileSync(constitution, 'utf8');
-  if (text.includes(OLD_DISPLAY_NAME)) {
-    writeFileSync(constitution, text.replaceAll(`我叫${OLD_DISPLAY_NAME}`, `我叫 ${DISPLAY_NAME}`).replaceAll(OLD_DISPLAY_NAME, DISPLAY_NAME));
   }
 }
 
