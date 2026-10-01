@@ -3,7 +3,8 @@
  * at the bottom of the screen, one step at a time in its bubble (the desktop-pet World's
  * `dialog`); no window opens:
  *
- * 1. hello, and what to call the person (the desktop-pet World's `user`);
+ * 1. hello, what to call the person (the desktop-pet World's `user`), and where they heard of
+ *    Coopanion (for the usage statistics; one of the buttons skips it);
  * 2. how lively to be (`roam`): while the cards are up Coo shows each one, standing still,
  *    strolling, or running back and forth;
  * 3. the model service (DeepSeek first, the others Coo Pet Provider offers after it, each card with
@@ -31,6 +32,10 @@ const ROAM_KEY = 'worlds.desktop-pet.roam';
 const DEFAULT_USER = '伙伴';
 /** Names that are only a default (「主人」 was the default before 0.1.2): the name box starts empty for them. */
 const DEFAULT_USERS = [DEFAULT_USER, '主人'];
+/** Answers to 「你是从哪里认识我的?」 and the ids they are reported as; the last skips. */
+const SOURCES: ReadonlyArray<[label: string, id: string]> = [
+  ['B站', 'bilibili'], ['小红书', 'xiaohongshu'], ['抖音', 'douyin'], ['GitHub', 'github'], ['朋友推荐', 'friend'], ['其他', 'other'], ['不告诉你', 'skip'],
+];
 /** Numbered steps, for the dots at the top of the bubble. */
 const STEPS = 5;
 /** How often a step waiting for the pet page looks again, and a download for its progress. */
@@ -45,6 +50,8 @@ const S = {
   askName: '我该怎么称呼你?',
   nameSend: '就这么叫',
   gotName: (name: string) => `${name},记住啦!`,
+  askSource: '你是从哪里认识我的?',
+  sourceThanks: '原来是这样,库...',
   askRoam: '平时我该安静一点,还是活泼一点?点一下,看看我会怎样。',
   roam: {
     off: { label: '不乱动', level: '低', line: '那我就乖乖站着,你叫我我再动。', motion: 'still' },
@@ -112,6 +119,8 @@ export interface GuideDeps {
   openDress: () => void;
   /** The introduction was walked through to the end (not closed early); `name` is what the person is called. */
   onFinish?: (name: string) => void;
+  /** Usage statistics: each step reached, the source answer, and how the introduction ended. */
+  track?: (type: string, fields: Record<string, unknown>) => void;
 }
 
 /** Ended with the close button: the rest is skipped. */
@@ -210,8 +219,11 @@ export async function runGuide(deps: GuideDeps): Promise<void> {
   running = true;
   const t = talker(deps.pet);
   const call = api(deps.console);
-  const step = (n: number, d: PetDialog): Promise<PetDialogAnswer> =>
-    t.show({ ...d, step: [n, STEPS], closable: true }).then((a) => { if ('closed' in a) throw new Closed(); return a; });
+  let reached = 0;
+  const step = (n: number, d: PetDialog): Promise<PetDialogAnswer> => {
+    if (n > reached) { reached = n; deps.track?.('guide_step', { step: n }); }
+    return t.show({ ...d, step: [n, STEPS], closable: true }).then((a) => { if ('closed' in a) throw new Closed(); return a; });
+  };
   try {
     // a moment for Coo to land after the window opens
     while (!t.connected()) await sleep(POLL_MS);
@@ -230,6 +242,13 @@ export async function runGuide(deps: GuideDeps): Promise<void> {
     const name = 'text' in a ? a.text : saved || DEFAULT_USER;
     if (name !== saved) await setPet(USER_KEY, name);
     await step(1, { text: S.gotName(name), actions: ['love'] });
+    const src = await step(1, {
+      text: S.askSource, actions: ['thinking'],
+      input: { kind: 'buttons', options: SOURCES.map(([label]) => ({ label })) },
+    });
+    const source = SOURCES['index' in src ? src.index : SOURCES.length - 1]?.[1] ?? 'skip';
+    deps.track?.('source', { answer: source });
+    if (source !== 'skip') await step(1, { text: S.sourceThanks, actions: ['nod'] });
 
     // 2 how lively: each card plays out while it is picked
     const ORDER: Roam[] = ['off', 'calm', 'free'];
@@ -290,10 +309,12 @@ export async function runGuide(deps: GuideDeps): Promise<void> {
     await step(5, { text: S.persona, marks: ['系统提示词'], actions: ['happy'], input: { kind: 'buttons', options: [{ label: S.personaOk, primary: true }] } });
     const end = await step(5, { text: S.finish, actions: ['happy'], input: { kind: 'buttons', options: [{ label: S.go, primary: true }, { label: S.dress }] } });
     markDone(deps.doneFile);
+    deps.track?.('guide_finished', {});
     deps.onFinish?.(name);
     if ('index' in end && end.index === 1) deps.openDress();
   } catch (err) {
     if (!(err instanceof Closed)) throw err;
+    deps.track?.('guide_closed', { step: reached });
     markDone(deps.doneFile);
     await t.show({ text: S.closed, actions: ['nod'] });
   } finally {

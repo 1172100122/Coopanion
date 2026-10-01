@@ -17,7 +17,7 @@ const OLD_MODULE = 'deepseek';
 const OLD_DISPLAY_NAME = '可缇';
 /** SHA-256 of the self-description versions 0.1.0 (after the rename) and 0.1.1 seeded, line endings as LF. */
 const OLD_CONSTITUTION = 'cfcb7527cbf3518ab9f077ee711c86661a70613b9e5caeb992b30a603490e5cf';
-const SEED_DIR = fileURLToPath(new URL('./seed/', import.meta.url));
+export const SEED_DIR = fileURLToPath(new URL('./seed/', import.meta.url));
 
 /**
  * Writes the first-run files that are missing; existing files are left as the operator made them,

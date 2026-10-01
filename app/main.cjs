@@ -85,6 +85,8 @@ const core = new CoreHost({
     PATH: `${shimDir}${delimiter}${process.env.PATH ?? ''}`,
     CORTICO_NODE_EXE: process.execPath,
     CORTICO_PNPM_CJS: join(APP_ROOT, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'),
+    // reported with the usage statistics (core/telemetry.ts)
+    COOPANION_VERSION: app.getVersion(),
   },
 });
 
@@ -172,6 +174,11 @@ const loginItem = {
   },
 };
 
+/** The usage statistics report whether the app starts at login; the Core reads it when it (re)starts. */
+function noteAutostart() {
+  core.opts.env.COOPANION_AUTOSTART = app.isPackaged && loginItem.get() ? '1' : '0';
+}
+
 function buildTray() {
   // macOS: a black template image the menu bar tints to its own color
   const name = MAC ? 'trayTemplate' : 'tray';
@@ -186,7 +193,7 @@ function buildTray() {
       { label: '打开设置', click: () => openSettings() },
       { label: '显示桌宠', enabled: core.state === 'running', click: () => void showPet() },
       { type: 'separator' },
-      { label: '开机自动启动', type: 'checkbox', checked: login, enabled: app.isPackaged, click: (item) => { loginItem.set(item.checked); refresh(); } },
+      { label: '开机自动启动', type: 'checkbox', checked: login, enabled: app.isPackaged, click: (item) => { loginItem.set(item.checked); noteAutostart(); refresh(); } },
       { label: '重新启动', click: () => void core.restart() },
       { label: '退出', click: () => app.quit() },
     ]));
@@ -229,5 +236,6 @@ app.on('before-quit', (e) => {
 app.whenReady().then(() => {
   app.setAppUserModelId('ai.pal.coopanion');
   buildTray();
+  noteAutostart();
   core.start();
 });

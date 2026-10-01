@@ -23,26 +23,31 @@
  * and `{ type: 'companion:quit' }` to quit the whole app; it asks for a clean stop with
  * `{ type: 'companion:shutdown' }`.
  */
+import { createHash } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { BotDefinition } from 'cortico/bot.ts';
 import { createBot } from 'cortico/bot.ts';
 import { announceDataDir, consumeBootFlags } from 'cortico/boot.ts';
 import type { WakeBus } from 'cortico/core/bus.ts';
+import { getByPath, type ConfigGroup } from 'cortico/core/config-schema.ts';
 import { secretReader } from 'cortico/core/secrets.ts';
-import type { CoreConfig } from 'cortico/core/types.ts';
+import type { Core } from 'cortico/core/core.ts';
+import type { CoreConfig, UsageRecord } from 'cortico/core/types.ts';
 import { loadDeployment } from 'cortico/deploy.ts';
-import { loadExtensions } from 'cortico/extensions.ts';
+import { loadExtensions, readInstalled, type ExtensionSet } from 'cortico/extensions.ts';
 import { deploymentRoot, providersRoot, repoRoot } from 'cortico/paths.ts';
 import { providerModules, registerProviderModules } from 'cortico/providers/registry.ts';
 import { withWorlds, type WorldDefinition, type WorldSection } from 'cortico/world.ts';
 import { TERMINAL } from 'cortico/worlds/terminal/definition.ts';
 import { desktopPetDefinition, type DesktopPetWorld } from 'cortico-world-desktop-pet';
 import { cuaDefinition } from 'cortico-world-cua';
-import COO from 'cortico-provider-coo';
+import COO, { vendorOf } from 'cortico-provider-coo';
 import { bundledConsoleAssets } from './bundled-panels.ts';
 import { askForKey, guideDone, markDone, runGuide, type GuideDeps } from './guide.ts';
-import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, seed } from './seed.ts';
+import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, SEED_DIR, seed } from './seed.ts';
+import { describeEndpoint, publicExtensionName, Telemetry, type Counter } from './telemetry.ts';
 
 /** The active endpoint's key is set in the process environment or the endpoint's `.env`. */
 function hasKey(config: CoreConfig): boolean {
@@ -88,6 +93,105 @@ function watchTalk(bus: WakeBus): () => boolean {
   return () => { const was = heard; heard = false; return was; };
 }
 
+/** The switch for anonymous usage statistics, on the 「习惯」 page and in the advanced settings. */
+const TELEMETRY_KEY = 'companion.telemetry';
+const COMPANION_GROUP: ConfigGroup = {
+  id: 'companion',
+  owner: 'persona',
+  schema: {
+    type: 'object',
+    title: 'Coopanion',
+    properties: {
+      [TELEMETRY_KEY]: {
+        type: 'boolean',
+        title: '匿名使用统计',
+        description: '发送不含对话内容的使用次数与设置,帮助改进 Coopanion。字段见 docs/TELEMETRY.md。',
+      },
+    },
+  },
+};
+
+/** Pet events counted for statistics, and whether they are a message to Coo. */
+const EVENT_COUNTERS: Record<string, [Counter, boolean]> = {
+  'desktop-pet.message': ['messagesText', true],
+  'desktop-pet.speech': ['messagesVoice', true],
+  'desktop-pet.touch': ['touches', false],
+  'desktop-pet.answer': ['answers', false],
+};
+
+/** Counts the person's events, Coo's lines, computer-use actions and model calls for `telemetry`. */
+function countUse(core: Core<CoreConfig>, config: CoreConfig, telemetry: Telemetry): void {
+  const { bus, toolLog, usageLog } = core;
+  const push = bus.push.bind(bus);
+  bus.push = (item, opts) => {
+    const hit = item.event ? EVENT_COUNTERS[item.event.type] : undefined;
+    if (hit) { telemetry.count(hit[0]); telemetry.interacted(hit[1]); }
+    push(item, opts);
+  };
+  const write = toolLog.write.bind(toolLog);
+  toolLog.write = (input) => {
+    if (input.tool === 'pet_say') telemetry.count('petReplies');
+    else if (input.tool.startsWith('cua_')) telemetry.count('cuaActions');
+    return write(input);
+  };
+  const append = usageLog.append.bind(usageLog);
+  usageLog.append = (rec: UsageRecord) => {
+    telemetry.usage(describeEndpoint(config.providers[config.activeProvider], rec.model, vendorOf), {
+      promptTokens: rec.promptTokens, completionTokens: rec.completionTokens, cacheHitTokens: rec.cacheHitTokens, failed: rec.outcome === 'failed',
+    });
+    append(rec);
+  };
+}
+
+/** Files in the workspace (Coo's memory), `.git` left out; stops counting at `cap`. */
+function countFiles(dir: string, cap = 10_000): number {
+  let n = 0;
+  const walk = (d: string) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (n >= cap) return;
+      if (e.name === '.git') continue;
+      if (e.isDirectory()) walk(join(d, e.name));
+      else n += 1;
+    }
+  };
+  try { walk(dir); } catch { /* unreadable: what was counted so far */ }
+  return n;
+}
+
+const sha256 = (file: string) => existsSync(file) ? createHash('sha256').update(readFileSync(file, 'utf8').replaceAll('\r\n', '\n')).digest('hex') : null;
+
+/** The settings and state sent with each day's statistics (docs/TELEMETRY.md, the day record). */
+function snapshotOf(config: CoreConfig, workspace: string): Record<string, unknown> {
+  const at = (path: string) => getByPath(config as unknown as Record<string, unknown>, path) ?? null;
+  const active = config.providers[config.activeProvider];
+  const endpoint = describeEndpoint(active, active?.spec?.model ?? '', vendorOf);
+  return {
+    vendor: endpoint.vendor,
+    model: endpoint.model,
+    endpointKind: endpoint.endpointKind,
+    language: config.language ?? null,
+    autostart: process.env.COOPANION_AUTOSTART === '1',
+    figure: at('worlds.desktop-pet.skin.figure'),
+    scheme: at('worlds.desktop-pet.skin.scheme'),
+    roam: at('worlds.desktop-pet.roam'),
+    voiceInput: at('worlds.desktop-pet.asr.enabled'),
+    cuaEnabled: at('worlds.cua.enabled'),
+    cuaLevel: at('worlds.cua.permission'),
+    personaChanged: sha256(join(workspace, 'CONSTITUTION.md')) !== sha256(join(SEED_DIR, 'CONSTITUTION.md')),
+    memoryFiles: countFiles(workspace),
+  };
+}
+
+/** Installed extensions as reported: a package from a registry by name, anything else as `private`. */
+function reportedExtensions(extensions: ExtensionSet): Array<{ name: string; version: string | null; kind: string | null }> {
+  const records = new Map(extensions.records.map((r) => [r.name, r]));
+  return readInstalled(extensions.dir).map(({ name, spec }) => {
+    const shown = publicExtensionName(name, spec);
+    const r = records.get(name);
+    return { name: shown, version: shown === 'private' ? null : r?.version ?? null, kind: r?.kind ?? null };
+  });
+}
+
 /**
  * The introduction on a first start, then the key asks while no key is set. An install that already
  * has a key (one from before the introduction existed) counts as introduced. When no pet page shows
@@ -119,6 +223,8 @@ export async function main(): Promise<void> {
   let bus: WakeBus | null = null;
   /** Set once the console listens. */
   let guide: GuideDeps | null = null;
+  /** Set once the deployment is loaded. */
+  let telemetry: Telemetry | null = null;
   const DESKTOP_PET = desktopPetDefinition({
     // the menu's header lends pause/resume, settings and quit; its dress tile opens the settings window's dress page
     controls: {
@@ -139,6 +245,8 @@ export async function main(): Promise<void> {
   const CUA = cuaDefinition({
     askPermission: async (question) => {
       const answer = await pet?.confirm(question, ['可以', '这次不行']) ?? 'unavailable';
+      if (answer !== 'unavailable') telemetry?.count('cuaAsked');
+      if (answer === 'yes') telemetry?.count('cuaGranted');
       return answer === 'unavailable' ? null : answer === 'yes' || answer === 'timeout' ? answer : 'no';
     },
   });
@@ -148,7 +256,11 @@ export async function main(): Promise<void> {
   const base: BotDefinition<CoreConfig> = {
     ...cormini,
     declares: [TERMINAL.id, DESKTOP_PET.id, CUA.id],
-    defaults: () => ({ ...cormini.defaults(), displayName: DISPLAY_NAME, web: { port: CONSOLE_PORT, theme: 'mint' } }),
+    defaults: () => ({ ...cormini.defaults(), displayName: DISPLAY_NAME, web: { port: CONSOLE_PORT, theme: 'mint' }, companion: { telemetry: true } }),
+    build: (loaded, worlds) => {
+      const parts = cormini.build(loaded, worlds);
+      return { ...parts, console: { ...parts.console, configGroups: [...parts.console?.configGroups ?? [], COMPANION_GROUP] } };
+    },
   };
   const bundled = [TERMINAL, DESKTOP_PET, CUA] as WorldDefinition<WorldSection>[];
 
@@ -171,10 +283,22 @@ export async function main(): Promise<void> {
 
   const bot = createBot(loaded, definition, { extensions });
   bus = bot.core.bus;
+  const stats = new Telemetry({
+    dir: deployDir,
+    version: process.env.COOPANION_VERSION ?? 'dev',
+    // development runs point it at a local telemetry-server
+    url: process.env.COOPANION_TELEMETRY_URL || undefined,
+    enabled: () => getByPath(loaded.config as unknown as Record<string, unknown>, TELEMETRY_KEY) !== false,
+    snapshot: () => snapshotOf(loaded.config, loaded.memoryDir),
+    extensions: () => reportedExtensions(extensions),
+  });
+  telemetry = stats;
+  countUse(bot.core, loaded.config, stats);
   // without a key every model call fails: hold events until the home page saves one and resumes
   const keyMissing = !hasKey(loaded.config);
   if (keyMissing) bot.core.bus.setPaused(true);
   const { port } = await bot.start();
+  stats.start();
   process.send?.({ type: 'companion:ready', port, dataDir: loaded.dataDir, keyMissing });
   const guideDeps: GuideDeps = {
     pet: () => pet,
@@ -182,6 +306,7 @@ export async function main(): Promise<void> {
     doneFile: join(deployDir, GUIDE_FILE),
     openDress: () => process.send?.({ type: 'companion:open', path: '#/dress' }),
     onFinish: (name) => guideFinished(bot.core.bus, name),
+    track: (type, fields) => stats.event(type, fields),
   };
   guide = guideDeps;
   void introduce(guideDeps, () => hasKey(loaded.config), keyMissing ? watchTalk(bot.core.bus) : null).catch((err) => {
@@ -192,7 +317,10 @@ export async function main(): Promise<void> {
   const shutdown = async (reason: string) => {
     if (stopping) return;
     stopping = true;
-    const done = await Promise.race([bot.shutdown(reason).then(() => true), new Promise<false>((r) => setTimeout(() => r(false), 30_000))]);
+    const done = await Promise.race([
+      Promise.all([bot.shutdown(reason), stats.stop()]).then(() => true),
+      new Promise<false>((r) => setTimeout(() => r(false), 30_000)),
+    ]);
     process.exit(done ? 0 : 1);
   };
   process.on('message', (msg: { type?: string }) => { if (msg?.type === 'companion:shutdown') void shutdown('应用退出'); });
@@ -202,6 +330,7 @@ export async function main(): Promise<void> {
   const log = bot.core.runlog.logger('process');
   process.on('uncaughtException', (err) => {
     log.emit('error', '未捕获异常,正在关机', { event: 'uncaught-exception', err });
+    stats.event('crash', { where: 'core', error: err instanceof Error ? err.name : typeof err });
     void shutdown('uncaughtException');
   });
   process.on('unhandledRejection', (reason) => {

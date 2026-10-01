@@ -31,3 +31,16 @@
   ; removed only when nothing is left, data\ included
   RMDir "$INSTDIR"
 !macroend
+
+!macro customUnInstall
+  ; usage statistics (core/telemetry.ts): an uninstall, not the one an update runs, is reported
+  ; with the install's id; the app keeps the id file only while statistics are switched on
+  ${IfNot} ${isUpdated}
+  ${AndIf} ${FileExists} "$INSTDIR\data\home\companion\telemetry-id"
+    FileOpen $0 "$INSTDIR\data\home\companion\telemetry-id" r
+    FileRead $0 $1 64
+    FileClose $0
+    nsExec::Exec `powershell -NoProfile -NonInteractive -Command "try { [Net.ServicePointManager]::SecurityProtocol = 'Tls12'; Invoke-RestMethod -Method Post -Uri 'https://survey.palailab.org/v1/uninstall' -ContentType 'application/json' -Body (ConvertTo-Json @{ installId = '$1' }) -TimeoutSec 5 | Out-Null } catch {}"`
+    Pop $0
+  ${EndIf}
+!macroend

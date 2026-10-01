@@ -3,7 +3,8 @@
  * group through `/api/config` (only the keys shown here are sent). The pet's own menu changes some
  * of the same values, so they are read again every few seconds. Dressing up has its own page
  * (features/dress). The hover buttons are picked from the pet menu's own actions, drawn with the
- * pet page's icons.
+ * pet page's icons. The last row switches the app's anonymous usage statistics (the `companion`
+ * group, core/telemetry.ts).
  */
 import { ICONS } from 'cortico-world-desktop-pet/web/pet-core.js';
 import { get, setConfig } from '../../core/api.ts';
@@ -11,6 +12,9 @@ import { pick } from '../../core/language.ts';
 import type { FeatureContext, FrameworkFeature } from '../feature.ts';
 
 const GROUP = 'world:desktop-pet';
+const STATS_GROUP = 'companion';
+const STATS_KEY = 'companion.telemetry';
+const STATS_DOC = 'https://github.com/Pal-AI-Lab/Coopanion/blob/main/docs/TELEMETRY.md';
 const K = 'worlds.desktop-pet';
 const KEYS = {
   user: `${K}.user`,
@@ -48,6 +52,9 @@ const S = pick({
     actions: { chat: '打字', voice: '语音输入', roam: '行为模式', theme: '夜间模式', sound: '音效', dress: '装扮', hide: '隐藏桌宠' } as Record<string, string>,
     saved: '已保存',
     saveFailed: (why: string) => `没保存上:${why}`,
+    stats: '匿名使用统计',
+    statsHint: '发送使用次数、时长和设置,不含对话内容、Key 和文件。',
+    statsDoc: '具体发送哪些字段',
   },
   en: {
     nav: 'Habits',
@@ -68,6 +75,9 @@ const S = pick({
     actions: { chat: 'Type', voice: 'Voice input', roam: 'Walking', theme: 'Night mode', sound: 'Sounds', dress: 'Dress up', hide: 'Hide pet' } as Record<string, string>,
     saved: 'Saved',
     saveFailed: (why: string) => `Not saved: ${why}`,
+    stats: 'Anonymous usage statistics',
+    statsHint: 'Sends counts, time used and settings; never conversations, keys or files.',
+    statsDoc: 'Every field it sends',
   },
 });
 
@@ -101,6 +111,13 @@ async function mount(ctx: FeatureContext): Promise<void> {
   const scaleBox = ui.h('div', 'companion-rangebox');
   scaleBox.append(scale, scaleText);
   const sound = ui.checkbox(S.sound, { onChange: (on) => void save(KEYS.sound, on) });
+  const stats = ui.checkbox(S.stats, { onChange: (on) => void save(STATS_KEY, on, STATS_GROUP) });
+  const statsDoc = ui.h('a', 'home-link', S.statsDoc);
+  statsDoc.href = STATS_DOC;
+  statsDoc.target = '_blank';
+  statsDoc.rel = 'noreferrer';
+  const statsBox = ui.h('div');
+  statsBox.append(stats.el, statsDoc);
   // hover buttons: one round toggle per action, in the menu's order; picked ones are lit
   let picked: string[] = [];
   const hoverBox = ui.h('div', 'companion-hoverpick');
@@ -147,14 +164,15 @@ async function mount(ctx: FeatureContext): Promise<void> {
     row(S.scale, scaleBox),
     row('', sound.el),
     row(S.hover, hoverBox, S.hoverHint(MAX_HOVER)),
+    row('', statsBox, S.statsHint),
     msg,
   );
   root.append(habits.el);
 
   /* ---------- behaviour ---------- */
-  const save = async (key: string, value: string | number | boolean) => {
+  const save = async (key: string, value: string | number | boolean, group = GROUP) => {
     try {
-      await setConfig(GROUP, { [key]: value }, opts);
+      await setConfig(group, { [key]: value }, opts);
       msg.textContent = S.saved;
       msg.classList.remove('bad');
     } catch (err) {
@@ -185,10 +203,13 @@ async function mount(ctx: FeatureContext): Promise<void> {
 
   const refreshValues = async () => {
     let values: Record<string, unknown> = {};
+    let statsValues: Record<string, unknown> = {};
     try {
       const d = await get<{ groups?: ConfigEntry[] }>('/api/config', opts);
       values = d.groups?.find((g) => g.group.id === GROUP)?.values ?? {};
+      statsValues = d.groups?.find((g) => g.group.id === STATS_GROUP)?.values ?? {};
     } catch { return; }
+    if (typeof statsValues[STATS_KEY] === 'boolean') stats.setChecked(statsValues[STATS_KEY] as boolean);
     const active = document.activeElement;
     if (typeof values[KEYS.user] === 'string' && active !== user) {
       user.value = values[KEYS.user] as string;
