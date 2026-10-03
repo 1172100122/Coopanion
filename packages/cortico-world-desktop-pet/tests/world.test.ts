@@ -210,6 +210,36 @@ describe('with a pet page', () => {
     expect((await page.next((m) => m.t === 'prefs')).skin).toEqual(skin);
   });
 
+  it('the position the page reports is written once, on stop, and the next run starts there', async () => {
+    const made = await mounted((c) => { c.rememberPosition = true; });
+    const page = await FakePage.open(origin(made.world));
+    page.send({ t: 'position', x: 0.3 });
+    page.send({ t: 'position', x: 'left' });
+    page.send({ t: 'position', x: 0.6 });
+    page.send({ t: 'text', text: 'ping' });
+    await expect.poll(() => made.host.events.length).toBe(1);
+    expect(made.persisted).toEqual([]);
+    await page.close();
+    await made.world.stop();
+    expect(made.persisted).toEqual([{ petX: 0.6 }]);
+
+    const again = await mounted((c) => { c.rememberPosition = true; c.petX = 0.6; });
+    const next = await FakePage.open(origin(again.world));
+    expect(next.init.startX).toBe(0.6);
+    await next.close();
+    await again.world.stop();
+    expect(again.persisted).toEqual([]);
+  });
+
+  it('with rememberPosition off the page gets no start position and a saved one is cleared on stop', async () => {
+    const made = await mounted((c) => { c.petX = 0.6; });
+    const page = await FakePage.open(origin(made.world));
+    expect(page.init.startX).toBeNull();
+    await page.close();
+    await made.world.stop();
+    expect(made.persisted).toEqual([{ petX: null }]);
+  });
+
   it('a browser tab only watches while the pet window is connected', async () => {
     const { world } = await mounted();
     const win = await FakePage.open(origin(world), 'role=pet&host=window');

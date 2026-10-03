@@ -217,6 +217,8 @@ export class DesktopPetWorld implements World {
   private touchWoke = false;
   private prefsKey = '';
   private prefsTimer: NodeJS.Timeout | null = null;
+  /** Where the pet window last said the pet stands, measured as `petX` is; written by `savePosition` on stop. */
+  private standX: number | null = null;
   private thinking = false;
   private readonly voiceSockets = new Set<WorldStreamSocket>();
   private lastLevelAt = 0;
@@ -283,6 +285,7 @@ export class DesktopPetWorld implements World {
   async stop(): Promise<void> {
     if (this.prefsTimer) clearInterval(this.prefsTimer);
     this.prefsTimer = null;
+    this.savePosition();
     if (this.packTimer) clearTimeout(this.packTimer);
     this.packTimer = null;
     if (this.touch) clearTimeout(this.touch.timer);
@@ -345,6 +348,9 @@ export class DesktopPetWorld implements World {
       roam: this.cfg.roam,
       sound: this.cfg.sound,
       theme: this.cfg.theme,
+      rememberPosition: this.cfg.rememberPosition,
+      // read by the page from `init` only
+      startX: this.cfg.rememberPosition ? this.cfg.petX : null,
       hoverButtons: hoverButtonList(this.cfg.hoverButtons),
       scale: this.cfg.window.scale,
       user: this.cfg.user,
@@ -442,6 +448,21 @@ export class DesktopPetWorld implements World {
     this.syncPrefs();
   }
 
+  /**
+   * Called only from `stop`, so config.json changes at most once a run: with `rememberPosition` on it
+   * stores the last reported position, with it off it clears a stored one. A failed write leaves
+   * the stored position as it was.
+   */
+  private savePosition(): void {
+    const x = this.cfg.rememberPosition ? this.standX ?? this.cfg.petX : null;
+    if (x === this.cfg.petX) return;
+    try {
+      this.opts.persist({ petX: x });
+    } catch (err) {
+      this.log?.warn(`桌宠位置没有保存:${(err as Error).message}`);
+    }
+  }
+
   private onPage(msg: PageMessage): void {
     switch (msg.t) {
       case 'hello': {
@@ -473,6 +494,10 @@ export class DesktopPetWorld implements World {
         return;
       }
       case 'prefs': return this.savePrefs(msg);
+      case 'position': {
+        if (typeof msg.x === 'number' && Number.isFinite(msg.x)) this.standX = Math.min(1, Math.max(0, msg.x));
+        return;
+      }
       case 'devices': {
         const list = Array.isArray(msg.list) ? msg.list : [];
         this.devices = list

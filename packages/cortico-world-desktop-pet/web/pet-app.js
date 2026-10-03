@@ -26,6 +26,7 @@ const prefs = {
   voice: { enabled: false, ready: false, detail: null, hint: '', mode: 'hold' },
   /** The actions shown as buttons beside the pet on hover. */
   hoverButtons: ['chat', 'voice'],
+  rememberPosition: false,
 };
 const sfx = createSfx();
 if (host) sfx.unlock();
@@ -82,12 +83,35 @@ async function applyFigure(s) {
   ctl.setFigure(fig);
 }
 
+/**
+ * The pet window puts the pet where it stood when the World last stopped (`startX`, a share of the window
+ * width) from the first `init` only; after a reconnect it stays where it is. While `rememberPosition` is on it
+ * reports where the pet stands each time the body changes mode, so the World holds the place of its last stop.
+ */
+let restored = false, sentX = null;
+function restorePosition(startX) {
+  sentX = null;
+  if (restored) return;
+  restored = true;
+  if (!host || typeof startX !== 'number' || ctl.pet.mode === 'drag') return;
+  const { minX, maxX } = ctl.bounds;
+  ctl.pet.x = ctl.pet.target = clamp(startX * innerWidth, minX, maxX);
+}
+function reportPosition() {
+  if (!host || !prefs.rememberPosition) return;
+  const x = ctl.pet.x / innerWidth;
+  if (sentX !== null && Math.abs(x - sentX) * innerWidth < 1) return;
+  sentX = x;
+  send({ t: 'position', x });
+}
+
 function applyPrefs(p) {
   if (p.skin) { const s = normalizeSkin(p.skin); ctl.setSkin(s); skinStyle.textContent = skinCss(s); applyFigure(s).catch((err) => console.error(err)); }
   if (p.roam) { prefs.roam = p.roam; ctl.setRoam(p.roam); }
   if (typeof p.sound === 'boolean') { prefs.sound = p.sound; sfx.set(p.sound); }
   if (p.theme === 'dark' || p.theme === 'light') { prefs.theme = p.theme; applyTheme(p.theme); }
   if (typeof p.scale === 'number') { prefs.scale = p.scale; ctl.resize(); }
+  if (typeof p.rememberPosition === 'boolean') { prefs.rememberPosition = p.rememberPosition; reportPosition(); }
   if (typeof p.user === 'string') prefs.user = p.user;
   if (typeof p.micDevice === 'string' && p.micDevice !== prefs.micDevice) { prefs.micDevice = p.micDevice; stopMic(); }
   if (typeof p.mic === 'boolean') { prefs.mic = p.mic; p.mic && !watching ? startMic() : stopMic(); }
@@ -100,7 +124,8 @@ function applyPrefs(p) {
 
 function onOrder(m) {
   switch (m.t) {
-    case 'init': case 'prefs': applyPrefs(m); break;
+    case 'init': restorePosition(m.startX); applyPrefs(m); break;
+    case 'prefs': applyPrefs(m); break;
     case 'watching': watching = true; stopMic(); break;
     case 'say': dropAsks(); queue.push({ kind: 'say', id: m.id, beats: m.beats, i: -1 }); ctl.holdRoam(20); break;
     case 'ask': dropAsks(); queue.push({ kind: 'ask', id: m.id, question: m.question, options: m.options || [], own: m.own !== false }); ctl.holdRoam(20); break;
@@ -126,6 +151,8 @@ function onBody(kind, d) {
   } else if (kind === 'touch') {
     send({ t: 'touch', ...d });
     if (d.kind === 'grab') closeMenu();
+  } else if (kind === 'mode') {
+    reportPosition();
   }
 }
 
@@ -1198,4 +1225,5 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 ctl.render();
+addEventListener('pagehide', reportPosition);
 requestAnimationFrame(frame);
