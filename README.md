@@ -159,6 +159,7 @@ Speech is recognized on your machine by **FunASR** (the SenseVoiceSmall model) a
 ### Playing with Coo
 
 - **Click** to poke it, **move back and forth over its head** to pat it, **press and drag** to pick it up; let go mid-swing to throw it. A poke makes Coo respond. Pats and pick-ups are passed on the next time it wakes. To have every touch wake it, set the desktop pet World's touch wake option to `all` in advanced mode.
+- **Expressions and motions**: Coo pairs what it says with a face and a motion. Faces: happy, wink, love, shy, surprised, angry, sad, sleepy, thinking, smug, pout, worried, determined, flustered, scared, excited (starry eyes), crying, confused. Motions include nod, shake, look around, turn, spin, jump, sit, sleep, wave, bow, shiver, flap, dance. As the DeepSeek Whale, a nod really dips the head and a shake turns the face, a wave raises the arm nearer you, and a bow tips the upper body forward.
 - **Right-click** for the menu: pause / resume, settings, quit, plus typing, voice input, walking, night mode, sounds, dress up and hide.
 - **Hover buttons**: the buttons beside Coo while the pointer rests on it. Typing and voice by default; pick up to six in Habits.
 - **Remember where Coo stands**: turn it on in Habits and Coo returns to the same spot across the screen on the next start.
