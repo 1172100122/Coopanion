@@ -13,6 +13,8 @@
  * - When the introduction ends, walked through or closed, its record: Coo's lines and the
  *   person's answers (`guide.ts`), with what is Coo's to settle with the person after it.
  *
+ * - Wake-ups Coo sets for itself (`alarms.ts`): its tools, and the event when one is due.
+ *
  * The last version told is kept in `notice.json` in the deployment directory, written when the
  * event is delivered, so an update told while events are held (no key yet) is told on a later start.
  */
@@ -20,8 +22,9 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { World, WorldHost } from 'cortico/core/types.ts';
+import type { ToolDef, World, WorldHost } from 'cortico/core/types.ts';
 import type { WorldDefinition, WorldSection } from 'cortico/world.ts';
+import { Alarms } from './alarms.ts';
 import type { GuideEnd } from './guide.ts';
 
 export const NOTICE_ID = 'coopanion';
@@ -37,6 +40,8 @@ export interface NoticeAssembly {
   notesDir: string;
   /** `notice.json` in the deployment directory. */
   stateFile: string;
+  /** `alarms.json` in the deployment directory. */
+  alarmsFile: string;
   /** A new install, introduction not run and no key: its first version is not news. */
   newInstall: () => boolean;
   /** A value of the live config by dotted path. */
@@ -211,10 +216,14 @@ export class NoticeWorld implements World {
   /** The version Coo is to hear about, until the pet page connects. */
   private update: { from: string | null; to: string } | null = null;
 
-  constructor(private readonly a: NoticeAssembly) {}
+  private readonly alarms: Alarms;
+
+  constructor(private readonly a: NoticeAssembly, timezone: string) {
+    this.alarms = new Alarms(a.alarmsFile, timezone);
+  }
 
   envPromptVars(): null { return null; }
-  tools(): [] { return []; }
+  tools(): ToolDef[] { return this.alarms.tools(); }
 
   async start(host: WorldHost): Promise<void> {
     this.host = host;
@@ -257,6 +266,9 @@ export class NoticeWorld implements World {
   private tick(): void {
     const host = this.host;
     if (!host) return;
+    for (const { alarm, missed } of this.alarms.takeDue(Date.now())) {
+      host.pushDeferred({ type: 'coopanion.alarm', origin: 'internal', render: () => this.alarms.dueText(alarm, missed) }, { trigger: 'flush' });
+    }
     const now = look(this.a.read);
     const guiding = this.a.guiding();
     // what the introduction set, up to the first look after it, is the introduction's to tell
@@ -293,8 +305,8 @@ export function noticeDefinition(assembly: NoticeAssembly): WorldDefinition<Worl
     id: NOTICE_ID,
     label: '应用通知',
     defaults: () => ({ enabled: false }),
-    create: () => {
-      const world = new NoticeWorld(assembly);
+    create: (ctx) => {
+      const world = new NoticeWorld(assembly, ctx.timezone);
       assembly.onCreate?.(world);
       return world;
     },

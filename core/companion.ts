@@ -372,6 +372,7 @@ export async function main(): Promise<void> {
     version: process.env.COOPANION_VERSION ?? 'dev',
     notesDir: join(APP_ROOT, 'docs', 'releases'),
     stateFile: join(deployDir, NOTICE_FILE),
+    alarmsFile: join(deployDir, 'alarms.json'),
     newInstall: () => !guideDone(join(deployDir, GUIDE_FILE)) && (config === null || !hasKey(config)),
     read: (path) => (config ? getByPath(config as unknown as Record<string, unknown>, path) : undefined),
     petConnected: () => (pet as DesktopPetWorld | null)?.petState().connected === true,
