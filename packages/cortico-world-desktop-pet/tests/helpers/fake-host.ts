@@ -27,9 +27,13 @@ export class FakeHost implements WorldHost {
 
   /** 与 events 逐条对齐:唤醒/攒批的口径也要能断言 */
   pushOpts: Array<PushOptions | undefined> = [];
+  /** 与 events 逐条对齐:事件开头的本地时间前缀;events 里的 text 去掉了它,断言只看正文 */
+  stamps: string[] = [];
 
   async pushEvent(e: Omit<EventEnvelope, 'cursor'>, opts?: PushOptions): Promise<EventEnvelope> {
-    const full = { ...e, cursor: this.events.length + 1 } as EventEnvelope;
+    const stamp = /^\[[^\]]*\d\d:\d\d\] /.exec(e.text)?.[0] ?? '';
+    this.stamps.push(stamp);
+    const full = { ...e, text: e.text.slice(stamp.length), cursor: this.events.length + 1 } as EventEnvelope;
     this.events.push(full);
     this.pushOpts.push(opts);
     return full;

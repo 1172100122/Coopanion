@@ -252,6 +252,19 @@ describe('with a pet page', () => {
     expect(tab.messages.some((m) => m.t === 'act')).toBe(false);
   });
 
+  it('puts the local time before each event, with the date on the first one only', async () => {
+    const { world, host } = await mounted();
+    const page = await FakePage.open(origin(world));
+    cleanup.push(() => page.close());
+    page.send({ t: 'text', text: 'a' });
+    await expect.poll(() => host.events.length).toBe(1);
+    page.send({ t: 'text', text: 'b' });
+    await expect.poll(() => host.events.length).toBe(2);
+    // a run that crosses midnight between the two dates the second one too
+    expect(host.stamps[0]).toMatch(/^\[\d\d-\d\d 周. \d\d:\d\d\] $/);
+    expect(host.stamps[1]).toMatch(/^\[\d\d:\d\d\] $/);
+  });
+
   it('a watching tab still sends typed text and a theme switch, which reaches the pet window', async () => {
     const { world, host, persisted } = await mounted();
     const win = await FakePage.open(origin(world), 'role=pet&host=window');

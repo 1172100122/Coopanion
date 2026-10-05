@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import type {
   Logger, OutputTap, ToolDef, ToolOutcome, World, WorldConsoleDecl, WorldHost, WorldLamp, WorldPanelDecl, WorldStreamSocket,
 } from 'cortico/core/types.ts';
-import { nowIso } from 'cortico/core/util.ts';
+import { nowIso, shortTime } from 'cortico/core/util.ts';
 import type { Language } from 'cortico/core/language.ts';
 import type { DeepPartial } from 'cortico/world.ts';
 import {
@@ -215,6 +215,8 @@ export class DesktopPetWorld implements World {
   private touch: TouchBatch | null = null;
   /** A touch has woken the bot and no turn has ended since; touches until then wait for the next wake. */
   private touchWoke = false;
+  /** The local date of the last event's time stamp; the next event on another date names its date again. */
+  private stampDay = '';
   private prefsKey = '';
   private prefsTimer: NodeJS.Timeout | null = null;
   /** Where the pet window last said the pet stands, measured as `petX` is; written by `savePosition` on stop. */
@@ -653,11 +655,25 @@ export class DesktopPetWorld implements World {
     void this.push('desktop-pet.touch', 'desktop-pet.touch', `[互动] ${text}`, wakes ? 'debounce' : 'piggyback');
   }
 
+  /**
+   * The person's local time an event happened, before its text: `[HH:MM] `, and `[MM-DD 周X HH:MM] ` for the
+   * first event of a run and the first on a new date, so the bot knows the date without a clock in its prefix.
+   */
+  private stamp(now = new Date()): string {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('zh-CN', { timeZone: this.opts.timezone, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })
+      .formatToParts(now).map((p) => [p.type, p.value]));
+    const day = `${parts.year}-${parts.month}-${parts.day}`;
+    const time = shortTime(this.opts.timezone, now);
+    if (day === this.stampDay) return `[${time}] `;
+    this.stampDay = day;
+    return `[${parts.month}-${parts.day} ${parts.weekday} ${time}] `;
+  }
+
   private async push(type: string, senderKey: string, text: string, trigger: 'flush' | 'debounce' | 'piggyback'): Promise<void> {
     const host = this.host;
     if (!host) return;
     try {
-      await host.pushEvent({ type, source: this.id, senderKey, ts: nowIso(this.opts.timezone), text }, { trigger });
+      await host.pushEvent({ type, source: this.id, senderKey, ts: nowIso(this.opts.timezone), text: this.stamp() + text }, { trigger });
     } catch (err) {
       this.log?.warn(`事件没能送出:${(err as Error).message}`);
     }
