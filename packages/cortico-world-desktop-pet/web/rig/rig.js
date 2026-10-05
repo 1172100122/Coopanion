@@ -13,28 +13,29 @@
  * which is how a figure fades from one colour scheme to another.
  */
 
-const VS = `#version 300 es
-in vec2 aPos; in vec2 aUv;
+// GLSL ES 1.00 and no vertex array objects: the same code runs on a WebGL 1 context, which some
+// machines give where WebGL 2 is refused (older Macs whose GPU ANGLE drives through OpenGL)
+const VS = `
+attribute vec2 aPos; attribute vec2 aUv;
 uniform vec4 uView; // x0, y0, 1/w, 1/h
-out vec2 vUv;
+varying vec2 vUv;
 void main() {
   vec2 n = (aPos - uView.xy) * uView.zw;
   gl_Position = vec4(n.x * 2.0 - 1.0, 1.0 - n.y * 2.0, 0.0, 1.0);
   vUv = aUv;
 }`;
-const FS = `#version 300 es
+const FS = `
 precision mediump float;
-in vec2 vUv;
+varying vec2 vUv;
 uniform sampler2D uTex;
 uniform sampler2D uTex2;
 uniform float uMix;
 uniform float uAlpha;
 uniform vec4 uTint; // rgb multiply, a = mix toward it
-out vec4 o;
 void main() {
-  vec4 c = mix(texture(uTex, vUv), texture(uTex2, vUv), uMix);
+  vec4 c = mix(texture2D(uTex, vUv), texture2D(uTex2, vUv), uMix);
   c.rgb = mix(c.rgb, c.rgb * uTint.rgb, uTint.a);
-  o = c * uAlpha;
+  gl_FragColor = c * uAlpha;
 }`;
 
 function shader(gl, type, src) {
@@ -47,8 +48,13 @@ function shader(gl, type, src) {
 export function createRig(canvas, model) {
   // the canvas lives in an SVG foreignObject, which the browser may repaint from the canvas at any time: keep the
   // drawing buffer, or a repaint between our frames shows an empty canvas (flicker, worst in screen recordings)
-  const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: true });
-  if (!gl) throw new Error('webgl2 unavailable');
+  const attrs = { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: true };
+  const gl = canvas.getContext('webgl2', attrs) || canvas.getContext('webgl', attrs);
+  if (!gl) throw new Error('webgl unavailable');
+  // WebGL 1 builds mipmaps only for power-of-two sizes, and the textures are not
+  const pot = (n) => (n & (n - 1)) === 0;
+  const gl2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+  const canMip = (src) => gl2 || (pot(src.width) && pot(src.height));
   const defs = model.deformers;
   let view = model.view; // [x0, y0, x1, y1]
 
@@ -63,8 +69,9 @@ export function createRig(canvas, model) {
     gl.bindTexture(gl.TEXTURE_2D, t);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    const mip = canMip(src);
+    if (mip) gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -106,25 +113,20 @@ export function createRig(canvas, model) {
         const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1;
         idx.push(a, b, c, b, d, c);
       }
-      const vao = gl.createVertexArray();
-      gl.bindVertexArray(vao);
       const pos = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, pos);
       gl.bufferData(gl.ARRAY_BUFFER, rest.byteLength, gl.DYNAMIC_DRAW);
-      gl.enableVertexAttribArray(loc.aPos);
-      gl.vertexAttribPointer(loc.aPos, 2, gl.FLOAT, false, 0, 0);
       const uvb = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, uvb);
       gl.bufferData(gl.ARRAY_BUFFER, uv, gl.STATIC_DRAW);
-      gl.enableVertexAttribArray(loc.aUv);
-      gl.vertexAttribPointer(loc.aUv, 2, gl.FLOAT, false, 0, 0);
       const ib = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
-      gl.bindVertexArray(null);
-      return { part: p, rest, out: new Float32Array(rest.length), vao, pos, uvb, ib, count: idx.length };
+      return { part: p, rest, out: new Float32Array(rest.length), pos, uvb, ib, count: idx.length };
     });
     meshes.forEach(m => { m.chain = chainOf(m.part.parent); });
+    gl.enableVertexAttribArray(loc.aPos);
+    gl.enableVertexAttribArray(loc.aUv);
   }
 
   // a lost context blanks the canvas; unless the loss is preventDefault-ed the browser never
@@ -154,7 +156,7 @@ export function createRig(canvas, model) {
     lost = true;
     try {
       for (const t of textures.values()) gl.deleteTexture(t);
-      for (const m of meshes) { gl.deleteBuffer(m.pos); gl.deleteBuffer(m.uvb); gl.deleteBuffer(m.ib); gl.deleteVertexArray(m.vao); }
+      for (const m of meshes) { gl.deleteBuffer(m.pos); gl.deleteBuffer(m.uvb); gl.deleteBuffer(m.ib); }
       if (prog) gl.deleteProgram(prog);
       for (const s of shaders) gl.deleteShader(s);
     } finally {
@@ -208,6 +210,10 @@ export function createRig(canvas, model) {
       }
       gl.bindBuffer(gl.ARRAY_BUFFER, m.pos);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, m.out);
+      gl.vertexAttribPointer(loc.aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, m.uvb);
+      gl.vertexAttribPointer(loc.aUv, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib);
       const tex2 = mixK > 0 ? textures.get(p.tex + '@mix') : null;
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, tex2 || tex);
@@ -217,10 +223,8 @@ export function createRig(canvas, model) {
       gl.uniform1f(loc.uAlpha, alpha);
       const tint = st.tint?.[p.id];
       gl.uniform4f(loc.uTint, ...(tint || [1, 1, 1, 0]));
-      gl.bindVertexArray(m.vao);
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_SHORT, 0);
     }
-    gl.bindVertexArray(null);
   }
 
   return {
