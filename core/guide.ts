@@ -15,8 +15,9 @@
  * 5. where the buttons and the menu are, that Coo's persona is in the settings window's
  *    「系统提示词」 page, and where settings live.
  *
- * Walked through to the end, it calls `onFinish` with the person's name. Every step has a close
- * button that ends the introduction. The console's 「使用引导」 runs it
+ * However it ends, walked through or closed, it calls `onEnd` with the record of what was said in
+ * the bubble (an API key shows as typed in, never as itself). Every step has a close button that
+ * ends the introduction. The console's 「使用引导」 runs it
  * again (the World's `pet.guide` panel method). Once it has run, a missing key is asked for in the
  * bubble from time to time (`askForKey`), with the key box right there.
  */
@@ -117,14 +118,36 @@ export interface GuideDeps {
   doneFile: string;
   /** Shows the dressing page (in the settings window). */
   openDress: () => void;
-  /** The introduction was walked through to the end (not closed early); `name` is what the person is called. */
-  onFinish?: (name: string) => void;
+  /** The introduction ended, walked through or closed. */
+  onEnd?: (end: GuideEnd) => void;
   /** Usage statistics: each step reached, the source answer, and how the introduction ended. */
   track?: (type: string, fields: Record<string, unknown>) => void;
 }
 
+export interface GuideEnd {
+  /** Walked through to the end, not closed early. */
+  finished: boolean;
+  /** What the person is called; null when it closed before the name was asked. */
+  name: string | null;
+  /** The last numbered step reached. */
+  step: number;
+  /** Coo's lines and the person's answers, in order. */
+  transcript: string[];
+}
+
 /** Ended with the close button: the rest is skipped. */
 class Closed extends Error {}
+
+/** One step for the record: Coo's line and, when the step asked something, the answer. */
+export function noteStep(d: PetDialog, a: PetDialogAnswer): string[] {
+  const lines = [`Coo:${d.text}`];
+  const input = d.input;
+  if ('closed' in a) lines.push('(对方点了关闭,引导到这里结束)');
+  else if ('index' in a && (input?.kind === 'buttons' || input?.kind === 'choices')) lines.push(`对方:${input.options[a.index]?.label ?? a.index}`);
+  else if ('text' in a) lines.push(`对方:${input?.kind === 'text' && input.secret ? '(填了 API Key)' : a.text}`);
+  else if ('alt' in a && input?.kind === 'text' && input.alt) lines.push(`对方:${input.alt}`);
+  return lines;
+}
 
 /** The console's routes, called as the console calls them. */
 function api(origin: string): ConsoleCall {
@@ -220,9 +243,15 @@ export async function runGuide(deps: GuideDeps): Promise<void> {
   const t = talker(deps.pet);
   const call = api(deps.console);
   let reached = 0;
+  let name: string | null = null;
+  const transcript: string[] = [];
   const step = (n: number, d: PetDialog): Promise<PetDialogAnswer> => {
     if (n > reached) { reached = n; deps.track?.('guide_step', { step: n }); }
-    return t.show({ ...d, step: [n, STEPS], closable: true }).then((a) => { if ('closed' in a) throw new Closed(); return a; });
+    return t.show({ ...d, step: [n, STEPS], closable: true }).then((a) => {
+      transcript.push(...noteStep(d, a));
+      if ('closed' in a) throw new Closed();
+      return a;
+    });
   };
   try {
     // a moment for Coo to land after the window opens
@@ -239,9 +268,10 @@ export async function runGuide(deps: GuideDeps): Promise<void> {
       text: S.askName, actions: ['thinking'],
       input: { kind: 'text', submit: S.nameSend, placeholder: DEFAULT_USER, value: saved && !DEFAULT_USERS.includes(saved) ? saved : '', maxLength: 20 },
     });
-    const name = 'text' in a ? a.text : saved || DEFAULT_USER;
-    if (name !== saved) await setPet(USER_KEY, name);
-    await step(1, { text: S.gotName(name), actions: ['love'] });
+    const named = 'text' in a ? a.text : saved || DEFAULT_USER;
+    name = named;
+    if (named !== saved) await setPet(USER_KEY, named);
+    await step(1, { text: S.gotName(named), actions: ['love'] });
     const src = await step(1, {
       text: S.askSource, actions: ['thinking'],
       input: { kind: 'buttons', options: SOURCES.map(([label]) => ({ label })) },
@@ -310,13 +340,15 @@ export async function runGuide(deps: GuideDeps): Promise<void> {
     const end = await step(5, { text: S.finish, actions: ['happy'], input: { kind: 'buttons', options: [{ label: S.go, primary: true }, { label: S.dress }] } });
     markDone(deps.doneFile);
     deps.track?.('guide_finished', {});
-    deps.onFinish?.(name);
+    deps.onEnd?.({ finished: true, name, step: reached, transcript });
     if ('index' in end && end.index === 1) deps.openDress();
   } catch (err) {
     if (!(err instanceof Closed)) throw err;
     deps.track?.('guide_closed', { step: reached });
     markDone(deps.doneFile);
     await t.show({ text: S.closed, actions: ['nod'] });
+    transcript.push(`Coo:${S.closed}`);
+    deps.onEnd?.({ finished: false, name, step: reached, transcript });
   } finally {
     running = false;
   }

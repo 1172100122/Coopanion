@@ -9,7 +9,9 @@
  *   dress, size, colours, walking, voice input, computer use), what changed, from what to what.
  *   Both write paths (the settings window's forms and a World's own `persist`) change the live
  *   config object, which is read every second; changes in a row reach Coo as one event, after the
- *   bus's debounce. Changes the introduction makes are not told: it tells its own (`guideFinished`).
+ *   bus's debounce. Changes the introduction makes are not told: the introduction's record tells them.
+ * - When the introduction ends, walked through or closed, its record: Coo's lines and the
+ *   person's answers (`guide.ts`), with what is Coo's to settle with the person after it.
  *
  * The last version told is kept in `notice.json` in the deployment directory, written when the
  * event is delivered, so an update told while events are held (no key yet) is told on a later start.
@@ -20,6 +22,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { World, WorldHost } from 'cortico/core/types.ts';
 import type { WorldDefinition, WorldSection } from 'cortico/world.ts';
+import type { GuideEnd } from './guide.ts';
 
 export const NOTICE_ID = 'coopanion';
 /** How often the watched settings are compared with the last look. */
@@ -42,6 +45,8 @@ export interface NoticeAssembly {
   petConnected: () => boolean;
   /** The introduction is running and makes its own changes. */
   guiding: () => boolean;
+  /** The instance, once created, for the introduction to hand its record to. */
+  onCreate?: (world: NoticeWorld) => void;
 }
 
 type Version = [number, number, number];
@@ -169,11 +174,32 @@ export function settingChanges(before: Look, after: Look, labels: Labels): strin
   });
 }
 
+const GUIDE_AFTER = (name: string) => [
+  `接下来可以和${name}商量你们之间的设定:你的性格和说话方式、你怎么称呼对方、对方想怎么叫你、希望你平时做什么不做什么。`,
+  '- 你的人设是工作区里的 CONSTITUTION.md,每次开新 session 都放进你的系统前缀。商量出结果后你可以自己改它,下一次 session 生效。',
+  '- 对方的称呼是设置窗口「习惯」页的「怎么称呼你」,由对方自己改;商量好的称呼和其他偏好可以记进你的工作区。',
+  '- 设置窗口的「系统提示词」页能看到并编辑你的整份系统提示词,CONSTITUTION 也在里面。可以引导对方去那里按自己的喜好改;对方想改什么,你也可以替对方改。',
+  '不用一次说完,看对方的兴致。',
+];
+
+export function guideText(end: GuideEnd): string {
+  const name = end.name ?? '对方';
+  const head = end.finished
+    ? `[启动引导] ${name}刚在你的气泡里走完了启动引导:定了你怎么称呼对方(「${name}」)、你平时活泼到什么程度、用哪家模型服务,也看过了怎么语音输入、按钮和菜单在哪。`
+    : `[启动引导] ${name}在第 ${end.step} 步关掉了启动引导,后面的步骤没有走。`;
+  return [
+    head,
+    '下面是引导里的对话。引导按程序写好的台词走,「Coo:」那几行是程序替你说的:',
+    '<guide>', ...end.transcript, '</guide>',
+    ...(end.finished ? GUIDE_AFTER(name) : []),
+  ].join('\n');
+}
+
 export function changedText(lines: string[]): string {
   return ['[设置变化] 对方刚改了这些设置,已经生效:', ...lines].join('\n');
 }
 
-class NoticeWorld implements World {
+export class NoticeWorld implements World {
   readonly id = NOTICE_ID;
   private timer: ReturnType<typeof setInterval> | null = null;
   private host: WorldHost | null = null;
@@ -219,6 +245,11 @@ class NoticeWorld implements World {
     return null;
   }
 
+  /** Hands Coo the introduction's record, delivered at once (held, like everything, while there is no key). */
+  guideEnded(end: GuideEnd): void {
+    this.host?.pushDeferred({ type: 'coopanion.guide', origin: 'internal', render: () => guideText(end) }, { trigger: 'flush' });
+  }
+
   private record(version: string): void {
     writeFileSync(this.a.stateFile, `${JSON.stringify({ version }, null, 2)}\n`);
   }
@@ -262,6 +293,10 @@ export function noticeDefinition(assembly: NoticeAssembly): WorldDefinition<Worl
     id: NOTICE_ID,
     label: '应用通知',
     defaults: () => ({ enabled: false }),
-    create: () => new NoticeWorld(assembly),
+    create: () => {
+      const world = new NoticeWorld(assembly);
+      assembly.onCreate?.(world);
+      return world;
+    },
   };
 }
