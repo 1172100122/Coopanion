@@ -681,8 +681,8 @@ function stopMic() {
 const ROAM_ORDER = ['off', 'calm', 'free'];
 const ROAM = { off: '不乱动', calm: '多待着', free: '常走动' };
 const ROAM_LEVEL = { off: '低', calm: '中', free: '高' };
-/** The voice button's badge: listening all the time, or only on the talk key. */
-const MIC_BADGE = { always: 'auto', hold: 'key', toggle: 'key' };
+/** The voice button's badge: `auto` when listening all the time, else the talk key (`Alt×2`). */
+const micBadge = () => (prefs.voice.mode === 'always' ? 'auto' : prefs.voice.key || 'key');
 /** Most hover buttons shown beside the pet. */
 const MAX_HOVER = 6;
 
@@ -701,7 +701,7 @@ const ACTIONS = {
   voice: {
     keep: true,
     icon: () => (prefs.voice.enabled ? ICONS.mic : ICONS.micOff),
-    badge: () => (prefs.voice.enabled ? MIC_BADGE[prefs.voice.mode] ?? '' : ''),
+    badge: () => (prefs.voice.enabled ? micBadge() : ''),
     on: () => prefs.voice.enabled,
     state: () => (!prefs.voice.enabled ? '语音输入:关 · 点一下打开'
       : !prefs.voice.ready ? `语音输入:开,但${prefs.voice.detail || '识别服务没有就绪'} · 点一下关掉`

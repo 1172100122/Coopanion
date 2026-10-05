@@ -149,10 +149,10 @@ Services other than DeepSeek follow their documentation and have not each been t
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Voice         | **Tap Left Alt, then press and hold it** (Left Option on Mac) and speak; releasing ends the sentence. Recognized text shows in a dashed bubble. |
 | Typing        | Rest the pointer on Coo and click the bubble button beside it. With "Double-click Coo to open the typing box" on in Habits, double-clicking works too. |
-| Mic button    | Appears when the pointer rests on Coo and turns voice input on or off. KEY on its corner means key-triggered listening, AUTO means always listening. Long-press it while listening to send the sentence at once. |
+| Mic button    | Appears when the pointer rests on Coo and turns voice input on or off. Its corner shows the talk key (`ALT×2` by default) while listening on the key, AUTO while always listening. Long-press it while listening to send the sentence at once. |
 | Answering     | When Coo offers choices, click one or press 1–3; if none fits, write your own in the last box.                                         |
 
-Talk key, microphone and listening mode (hold to talk / press to toggle / always listen) are on the Voice input page. The talk key can be a single key, a combination such as `Ctrl + Space`, or a double press. When the talk key is unavailable, Coo falls back to always listening and the button shows AUTO.
+Talk key, microphone and listening mode (hold to talk / press to toggle / always listen) are on the Voice input page. Click the talk key button and press a single key, a combination such as `Ctrl + Space`, or a mouse side button; beside it, choose **Double-tap, then hold** (the default) or **Just hold**. When the talk key is unavailable, Coo falls back to always listening and the button shows AUTO.
 
 Speech is recognized on your machine by **FunASR** (the SenseVoiceSmall model) and audio is never uploaded. The model is about 230 MB and is downloaded once, from the guide or the Voice input page. On Windows you can use the built-in recognizer instead, which needs no download but is less accurate.
 
