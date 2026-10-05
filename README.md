@@ -200,7 +200,7 @@ Click the tray icon, or right-click Coo and click the gear. The window opens in 
 | Usage & cost  | Tokens used and money spent per day                                                                               |
 | Chat          | The current conversation; you can also talk to Coo from here                                                      |
 
-The current version is shown at the top left, with a download link below it when a newer release is out.
+The current version is shown at the top left, with a download link below it when a newer release is out. After an update, Coo tells you what the new version brings; when you change what it calls you, its dress, walking, computer use or similar settings here, it hears about it and responds.
 
 **Advanced mode** at the bottom left shows every page (Worlds, models, extensions, memory, diagnostics); **Back to normal mode** hides them again.
 

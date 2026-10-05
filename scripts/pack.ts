@@ -2,7 +2,7 @@
  * Assembles `build/app/`, the directory electron-builder packages, then runs electron-builder.
  *
  * The workspace's pnpm layout (symlinked packages) is not what an installed app should carry, so
- * the app directory is built flat: the app code, the staged Cortico copy, a `package.json` with
+ * the app directory is built flat: the app code, the release notes, the staged Cortico copy, a `package.json` with
  * only the runtime dependencies installed by npm, and the three workspace packages copied into
  * `node_modules/` as real directories.
  *
@@ -45,6 +45,8 @@ rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 cpSync(join(ROOT, 'app'), join(OUT, 'app'), { recursive: true });
 cpSync(join(ROOT, 'core'), join(OUT, 'core'), { recursive: true });
+// the coopanion World (core/notice.ts) tells Coo these after an update
+cpSync(join(ROOT, 'docs', 'releases'), join(OUT, 'docs', 'releases'), { recursive: true });
 cpSync(join(ROOT, 'build', 'cortico'), join(OUT, 'build', 'cortico'), { recursive: true, filter: skip(join(ROOT, 'build', 'cortico')) });
 writeFileSync(join(OUT, 'package.json'), JSON.stringify({
   name: rootPkg.name, productName: rootPkg.productName, version: rootPkg.version, description: rootPkg.description,

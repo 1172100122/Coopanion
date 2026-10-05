@@ -1,5 +1,5 @@
 /**
- * The app's Core process: Cormini as the Persona, the terminal, desktop-pet and cua Worlds, Coo Pet
+ * The app's Core process: Cormini as the Persona, the terminal, desktop-pet, cua and coopanion Worlds, Coo Pet
  * Provider (DeepSeek and the other model services Coo offers) next to Cortico's built-in providers,
  * and Worlds or providers installed from npm through the console's extension page.
  *
@@ -8,6 +8,9 @@
  * foot does; computer use
  * asks for permission in the pet's bubble, and falls back to its own system dialog while no
  * pet page is connected.
+ *
+ * The `coopanion` World (`notice.ts`) tells Coo what the app has to say: the release notes after
+ * an update, and the settings the person changes.
  *
  * The settings window's colours follow the pet's look (`console-theme.ts`): at start and whenever the
  * dressing page saves one.
@@ -53,6 +56,7 @@ import COO, { vendorOf } from 'cortico-provider-coo';
 import { bundledConsoleAssets } from './bundled-panels.ts';
 import { followPetLook } from './console-theme.ts';
 import { askForKey, guideDone, markDone, runGuide, type GuideDeps } from './guide.ts';
+import { noticeDefinition } from './notice.ts';
 import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, SEED_DIR, seed } from './seed.ts';
 import { crashFields, describeEndpoint, publicExtensionName, Telemetry, type Counter } from './telemetry.ts';
 
@@ -74,6 +78,8 @@ const TALK_EVENTS = new Set(['desktop-pet.message', 'desktop-pet.speech']);
 const ASK_AFTER_GUIDE_MS = 20 * 60_000;
 /** Written in the deployment directory once the introduction has run. */
 const GUIDE_FILE = 'guide.json';
+/** The last version the `coopanion` World told Coo about, in the deployment directory. */
+const NOTICE_FILE = 'notice.json';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -300,14 +306,14 @@ function reportedExtensions(extensions: ExtensionSet): Array<{ name: string; ver
  * up on a first start, the settings window opens at the home page instead, since nothing else would
  * tell the person why Coo stays silent.
  */
-async function introduce(deps: GuideDeps, keySet: () => boolean, talked: (() => boolean) | null): Promise<void> {
+async function introduce(deps: GuideDeps, run: (deps: GuideDeps) => Promise<void>, keySet: () => boolean, talked: (() => boolean) | null): Promise<void> {
   const first = !guideDone(deps.doneFile);
   if (first && keySet()) { markDone(deps.doneFile); return; }
   if (first) {
     const deadline = Date.now() + PET_WAIT_MS;
     while (!deps.pet()?.petState().connected && Date.now() < deadline) await sleep(1000);
     if (!deps.pet()?.petState().connected) process.send?.({ type: 'companion:open', path: '#/home' });
-    await runGuide(deps);
+    await run(deps);
   }
   if (!talked) return;
   // the introduction just asked for the key and the person put it off: the next ask waits
@@ -327,6 +333,13 @@ export async function main(): Promise<void> {
   let guide: GuideDeps | null = null;
   /** Set once the deployment is loaded. */
   let telemetry: Telemetry | null = null;
+  let config: CoreConfig | null = null;
+  /** The introduction is running: the settings it makes are not told as changes. */
+  let guiding = false;
+  const guideRun = async (deps: GuideDeps) => {
+    guiding = true;
+    try { await runGuide(deps); } finally { guiding = false; }
+  };
   const DESKTOP_PET = desktopPetDefinition({
     // the menu's header lends pause/resume, settings and quit; its dress tile opens the settings window's dress page
     controls: {
@@ -339,7 +352,7 @@ export async function main(): Promise<void> {
       guide: () => {
         if (!guide) return;
         process.send?.({ type: 'companion:hide' });
-        void runGuide(guide);
+        void guideRun(guide);
       },
     },
     onCreate: (world) => { pet = world; },
@@ -355,10 +368,20 @@ export async function main(): Promise<void> {
   });
   const home = deploymentRoot();
   seed(home);
+  const deployDir = join(home, DEPLOYMENT);
+  const NOTICE = noticeDefinition({
+    version: process.env.COOPANION_VERSION ?? 'dev',
+    notesDir: join(APP_ROOT, 'docs', 'releases'),
+    stateFile: join(deployDir, NOTICE_FILE),
+    newInstall: () => !guideDone(join(deployDir, GUIDE_FILE)) && (config === null || !hasKey(config)),
+    read: (path) => (config ? getByPath(config as unknown as Record<string, unknown>, path) : undefined),
+    petConnected: () => (pet as DesktopPetWorld | null)?.petState().connected === true,
+    guiding: () => guiding,
+  });
   const cormini = await corminiDefinition();
   const base: BotDefinition<CoreConfig> = {
     ...cormini,
-    declares: [TERMINAL.id, DESKTOP_PET.id, CUA.id],
+    declares: [TERMINAL.id, DESKTOP_PET.id, CUA.id, NOTICE.id],
     defaults: () => ({
       ...cormini.defaults(),
       displayName: DISPLAY_NAME,
@@ -373,7 +396,7 @@ export async function main(): Promise<void> {
       return { ...parts, console: { ...parts.console, configGroups: [...parts.console?.configGroups ?? [], COMPANION_GROUP] } };
     },
   };
-  const bundled = [TERMINAL, DESKTOP_PET, CUA] as WorldDefinition<WorldSection>[];
+  const bundled = [TERMINAL, DESKTOP_PET, CUA, NOTICE] as WorldDefinition<WorldSection>[];
 
   // extension providers must be registered before endpoints are resolved
   const extensions = await loadExtensions(repoRoot(), {
@@ -387,8 +410,8 @@ export async function main(): Promise<void> {
   ]));
   const definition = withWorlds(base, [...bundled, ...extensions.worlds]);
 
-  const deployDir = join(home, DEPLOYMENT);
   const loaded = loadDeployment(definition, deployDir, repoRoot(), join(repoRoot(), 'bots', 'cormini'), providersRoot());
+  config = loaded.config;
   announceDataDir(loaded.dataDir);
   followPetLook(deployDir, getByPath(loaded.config as unknown as Record<string, unknown>, 'worlds.desktop-pet.skin') as { figure?: string; scheme?: string } | undefined);
   consumeBootFlags(loaded.dataDir);
@@ -429,7 +452,7 @@ export async function main(): Promise<void> {
     track: (type, fields) => stats.event(type, fields),
   };
   guide = guideDeps;
-  void introduce(guideDeps, () => hasKey(loaded.config), keyMissing ? watchTalk(bot.core.bus) : null).catch((err) => {
+  void introduce(guideDeps, guideRun, () => hasKey(loaded.config), keyMissing ? watchTalk(bot.core.bus) : null).catch((err) => {
     bot.core.runlog.logger('process').emit('error', '引导出错', { event: 'guide-error', err });
   });
 
