@@ -322,8 +322,12 @@ export function mini(face, acc, t = 0, extra = {}) {
 }
 
 /* ---------- skin ---------- */
-/** Bodies the pet can wear: Coo (drawn here) or the DeepSeek whale maid (web/whale, with its colour schemes). */
-export const FIGURES = [['coo', 'Coo'], ['whale', 'DeepSeek 大肥鱼']];
+/**
+ * The body is `figure`: `coo`, drawn here, or the id of a figure pack (src/packs.ts, drawn by
+ * figure-sandbox.js); `scheme` is the pack's dress-up pick. Whether a pack with that id is installed
+ * is the pages' to find out: an id that is not falls back to Coo there.
+ */
+const FIGURE_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export function defaultSkin() {
   return { figure: 'coo', scheme: 'deepseek', palette: 'mint', head: 'none', side: 'none', glasses: 'none', neck: 'none', colors: JSON.parse(JSON.stringify(CHANNEL_DEFAULT)) };
 }
@@ -332,8 +336,8 @@ const validColor = (slot, v) => (v === 'eye' || (v === 'body' && !NO_BODY[slot])
 export function normalizeSkin(raw) {
   const skin = defaultSkin();
   if (!raw || typeof raw !== 'object') return skin;
-  if (FIGURES.some(([id]) => id === raw.figure)) skin.figure = raw.figure;
-  // the whale's schemes are listed in its model; the pet page falls back to the original for an unknown id
+  if (typeof raw.figure === 'string' && FIGURE_ID.test(raw.figure)) skin.figure = raw.figure;
+  // a pack lists its picks in its manifest; it falls back to its first for one it does not know
   if (typeof raw.scheme === 'string' && /^[a-z0-9-]{1,32}$/.test(raw.scheme)) skin.scheme = raw.scheme;
   if (PALETTES.some(p => p.id === raw.palette)) skin.palette = raw.palette;
   for (const slot of SLOTS) if (SLOT_LISTS[slot].some(h => h[0] === raw[slot])) skin[slot] = raw[slot];

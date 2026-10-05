@@ -29,6 +29,7 @@ const KEYS = {
   remember: `${K}.rememberPosition`,
   hover: `${K}.hoverButtons`,
   dblclick: `${K}.doubleClickChat`,
+  selfAdjust: `${K}.selfAdjust`,
 } as const;
 
 /** The pet menu's actions in its order (the World's PET_ACTIONS), with the icon each shows. */
@@ -77,6 +78,8 @@ const S = pick({
     hover: '悬停按钮',
     hoverHint: (n: number) => `鼠标停在 Coo 身上时旁边出现的按钮,最多 ${n} 个。`,
     dblclick: '双击 Coo 打开打字框',
+    selfAdjust: '允许 Coo 自己调整',
+    selfAdjustHint: 'Coo 可以自己换形象和装扮、改走动多少;改音效、大小、黑白模式、悬停按钮和对你的称呼前会先问你。关掉后这些它都改不了。',
     actions: { chat: '打字', voice: '语音输入', roam: '行为模式', theme: '夜间模式', sound: '音效', dress: '装扮', hide: '隐藏桌宠' } as Record<string, string>,
     saved: '已保存',
     saveFailed: (why: string) => `没保存上:${why}`,
@@ -120,6 +123,8 @@ const S = pick({
     hover: 'Hover buttons',
     hoverHint: (n: number) => `Buttons beside Coo while the pointer rests on it, up to ${n}.`,
     dblclick: 'Double-click Coo to open the typing box',
+    selfAdjust: 'Let Coo adjust itself',
+    selfAdjustHint: 'Coo may change its own figure, dress and how much it walks; it asks you before changing sounds, size, night or day look, hover buttons or what it calls you. When off, it can change none of these.',
     actions: { chat: 'Type', voice: 'Voice input', roam: 'Walking', theme: 'Night mode', sound: 'Sounds', dress: 'Dress up', hide: 'Hide pet' } as Record<string, string>,
     saved: 'Saved',
     saveFailed: (why: string) => `Not saved: ${why}`,
@@ -161,6 +166,7 @@ async function mount(ctx: FeatureContext): Promise<void> {
   const lockFps = ui.checkbox(S.lockFps, { onChange: (on) => void save(KEYS.lockFps, on) });
   const remember = ui.checkbox(S.remember, { onChange: (on) => void save(KEYS.remember, on) });
   const dblclick = ui.checkbox(S.dblclick, { onChange: (on) => void save(KEYS.dblclick, on) });
+  const selfAdjust = ui.checkbox(S.selfAdjust, { onChange: (on) => void save(KEYS.selfAdjust, on) });
   const stats = ui.checkbox(S.stats, { onChange: (on) => void save(STATS_KEY, on, STATS_GROUP) });
   const statsDoc = ui.h('a', 'home-link', S.statsDoc);
   statsDoc.href = STATS_DOC;
@@ -216,6 +222,7 @@ async function mount(ctx: FeatureContext): Promise<void> {
     row('', remember.el, S.rememberHint),
     row(S.hover, hoverBox, S.hoverHint(MAX_HOVER)),
     row('', dblclick.el),
+    row('', selfAdjust.el, S.selfAdjustHint),
     row('', statsBox, S.statsHint),
     msg,
   );
@@ -317,6 +324,7 @@ async function mount(ctx: FeatureContext): Promise<void> {
     if (typeof values[KEYS.lockFps] === 'boolean') lockFps.setChecked(values[KEYS.lockFps] as boolean);
     if (typeof values[KEYS.remember] === 'boolean') remember.setChecked(values[KEYS.remember] as boolean);
     if (typeof values[KEYS.dblclick] === 'boolean') dblclick.setChecked(values[KEYS.dblclick] as boolean);
+    if (typeof values[KEYS.selfAdjust] === 'boolean') selfAdjust.setChecked(values[KEYS.selfAdjust] as boolean);
     if (typeof values[KEYS.hover] === 'string') {
       picked = (values[KEYS.hover] as string).split(',').map((x) => x.trim()).filter((x) => ACTIONS.some(([a]) => a === x));
       renderHover();

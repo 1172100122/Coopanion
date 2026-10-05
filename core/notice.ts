@@ -5,8 +5,9 @@
  *   (`docs/releases/v<version>.md`, which the installer ships), once the pet page is connected. A
  *   new install starts silent; an install from before this World (no state file) hears the
  *   current version's notes only. Development runs (`dev`) say nothing.
- * - When the person changes a setting Coo shows or works by (what it calls them, its figure and
- *   dress, size, colours, walking, voice input, computer use), what changed, from what to what.
+ * - When the person changes a setting Coo shows or works by (what it calls them, Coo's dress, size,
+ *   colours, walking, voice input, computer use), what changed, from what to what. A switch of
+ *   figure or of a figure pack's pick is the desktop-pet World's to tell: it knows the body.
  *   Both write paths (the settings window's forms and a World's own `persist`) change the live
  *   config object, which is read every second; changes in a row reach Coo as one event, after the
  *   bus's debounce. Changes the introduction makes are not told: the introduction's record tells them.
@@ -98,15 +99,14 @@ export function updatedText(from: string | null, to: string, notes: Array<{ vers
 }
 
 interface Labels {
-  /** id → name of Coo's palettes, its accessories (all slots) and the whale's colour schemes. */
+  /** id → name of Coo's palettes and its accessories (all slots). */
   palettes: Record<string, string>;
   accessories: Record<string, string>;
-  schemes: Record<string, string>;
 }
 
 /** Names as the dressing page shows them, from the pet package; ids stand in for any that fail to load. */
 async function loadLabels(): Promise<Labels> {
-  const labels: Labels = { palettes: {}, accessories: {}, schemes: {} };
+  const labels: Labels = { palettes: {}, accessories: {} };
   const require = createRequire(import.meta.url);
   try {
     const core = await import(pathToFileURL(require.resolve('cortico-world-desktop-pet/web/pet-core.js')).href) as {
@@ -115,12 +115,6 @@ async function loadLabels(): Promise<Labels> {
     };
     for (const p of core.PALETTES) labels.palettes[p.id] = p.label;
     for (const list of Object.values(core.SLOT_LISTS)) for (const [id, label] of list) labels.accessories[id] = label;
-  } catch { /* ids */ }
-  try {
-    const model = JSON.parse(readFileSync(require.resolve('cortico-world-desktop-pet/web/whale/model.json'), 'utf8')) as {
-      schemes: Array<{ id: string; brand: string; label: string }>;
-    };
-    for (const s of model.schemes) labels.schemes[s.id] = `${s.brand}(${s.label})`;
   } catch { /* ids */ }
   return labels;
 }
@@ -141,8 +135,6 @@ const CUA = 'worlds.cua';
 
 const WATCHED: Watched[] = [
   { path: `${PET}.user`, name: '你对对方的称呼' },
-  { path: `${PET}.skin.figure`, name: '你的形象', say: named({ coo: 'Coo', whale: 'DeepSeek 大肥鱼' }) },
-  { path: `${PET}.skin.scheme`, name: '大肥鱼的配色', say: (v, l) => l.schemes[String(v)] ?? String(v) },
   { path: `${PET}.skin.palette`, name: 'Coo 的配色', say: (v, l) => l.palettes[String(v)] ?? String(v) },
   { path: `${PET}.skin.head`, name: 'Coo 的头饰', say: (v, l) => l.accessories[String(v)] ?? String(v) },
   { path: `${PET}.skin.side`, name: 'Coo 的耳饰', say: (v, l) => l.accessories[String(v)] ?? String(v) },
@@ -208,7 +200,7 @@ export class NoticeWorld implements World {
   readonly id = NOTICE_ID;
   private timer: ReturnType<typeof setInterval> | null = null;
   private host: WorldHost | null = null;
-  private labels: Labels = { palettes: {}, accessories: {}, schemes: {} };
+  private labels: Labels = { palettes: {}, accessories: {} };
   /** The settings as Coo last heard them, and as the last look saw them. */
   private told: Look = {};
   private seen: Look = {};
@@ -252,6 +244,11 @@ export class NoticeWorld implements World {
     if (from && compare(parseVersion(to)!, from) > 0) return { from: last, to };
     if (last !== to) this.record(to);
     return null;
+  }
+
+  /** The settings as they are now are Coo's own doing (`pet_set`): nothing to tell it. */
+  acceptCurrent(): void {
+    this.told = this.seen = look(this.a.read);
   }
 
   /** Hands Coo the introduction's record, delivered at once (held, like everything, while there is no key). */

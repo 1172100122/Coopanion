@@ -1,14 +1,15 @@
 /**
- * Dressing page: the body (Coo or the DeepSeek whale maid); for Coo the palette, four accessory slots and
- * their color channels, for the whale her colour schemes; with a live preview.
+ * Dressing page: the body (Coo or a figure pack, src/packs.ts); for Coo the palette, four accessory slots
+ * and their color channels, for a pack a row per dress-up axis of its manifest; with a live preview.
  * Every change is saved through `POST /api/skin` (the dark/light switch through `POST /api/prefs`);
  * the World persists it and pushes it to the pet window. Changes made elsewhere arrive over
  * `/socket?role=dress`.
  */
 import {
   applyTheme, createPet, createSfx, mini, normalizeSkin, skinCss, wear,
-  PALETTES, HEADS, SIDES, GLASSES, NECKS, ACC_COLORS, LINKED, NO_BODY, ROLES, FIGURES,
+  PALETTES, HEADS, SIDES, GLASSES, NECKS, ACC_COLORS, LINKED, NO_BODY, ROLES,
 } from './pet-core.js';
+import { loadPackFigure } from './figure-sandbox.js';
 
 import { bindAppearance } from './appearance.js';
 bindAppearance(document, window);
@@ -52,20 +53,32 @@ function save(path, body) {
     .catch(() => { $('#saved').textContent = '没保存上:连不上桌宠服务'; });
 }
 
-// the whale's figure and scheme list load the first time she is shown
-let whale = null, schemes = null, wanted = 'coo';
-fetch('/web/whale/model.json').then((r) => r.json()).then((m) => { schemes = (m.schemes || []).filter((s) => s.ready !== false); render(); }).catch(() => {});
+// the installed figure packs, asked for again whenever the page hears of a look
+let packs = [];
+const loadPacks = () => fetch('/api/figures').then((r) => r.json()).then((list) => { packs = list; render(); }).catch(() => {});
+loadPacks();
+let wanted = 'coo', packBody = null;
+// a pack that will not load or breaks previews as Coo, as on the desktop
+function previewFailed(id, err) {
+  console.error(err);
+  if (packBody?.id === id) packBody = null;
+  if (ctl.figure?.pack === id) ctl.setFigure(null);
+}
 async function showFigure(s) {
   wanted = s.figure;
-  if (s.figure !== 'whale') { ctl.setFigure(null); return; }
-  whale ??= import('./whale/figure.js').then((m) => m.createWhaleFigure(undefined, { scheme: s.scheme }));
-  const fig = await whale;
-  if (wanted !== 'whale') return;
-  await fig.setScheme(s.scheme, { fade: ctl.figure === fig ? .4 : 0, at: ctl.time });
-  // mounting her takes a WebGL context, which a machine without usable GL (a blocklisted GPU and no
-  // software fallback) refuses: preview the built-in Coo instead of leaving a body that throws every
-  // frame it is drawn
-  try { ctl.setFigure(fig); } catch (err) { console.error(err); ctl.setFigure(null); }
+  if (s.figure === 'coo') { packBody = null; ctl.setFigure(null); return; }
+  try {
+    if (packBody?.id === s.figure) { await packBody.fig.setScheme(s.scheme, { fade: .4, at: ctl.time }); return; }
+    const pack = packs.find((p) => p.id === s.figure) ?? (await (await fetch('/api/figures')).json()).find((p) => p.id === s.figure);
+    if (!pack) throw new Error('没有装这个形象');
+    const fig = await loadPackFigure({ layer: $('#figureLayer'), pack, scheme: s.scheme, onError: (err) => previewFailed(s.figure, err) });
+    if (wanted !== s.figure) { fig.dispose(); return; }
+    await fig.setScheme(s.scheme, { fade: 0, at: ctl.time });
+    packBody = { id: s.figure, fig };
+    ctl.setFigure(fig);
+  } catch (err) {
+    previewFailed(s.figure, err);
+  }
 }
 
 function apply(next, persist) {
@@ -106,34 +119,81 @@ function colorRow(slot, item) {
   return row;
 }
 
+const nameOf = (n) => (n && (n.zh ?? Object.values(n)[0])) || '';
+/** The option of each axis that `scheme` picks: a preset id, or the options joined by `-` in axis order. */
+function picksOf(pack, scheme) {
+  const preset = pack.presets.find((p) => p.id === scheme);
+  const parts = (scheme || '').split('-');
+  return Object.fromEntries(pack.axes.map((a, i) => {
+    const want = preset ? preset.pick[a.id] : parts[i];
+    return [a.id, a.options.some((o) => o.id === want) ? want : a.options[0].id];
+  }));
+}
+/** `skin.scheme` for a set of picks: the preset that picks exactly them, else the options joined. */
+function schemeOf(pack, picks) {
+  const preset = pack.presets.find((p) => pack.axes.every((a) => p.pick[a.id] === picks[a.id]));
+  return preset ? preset.id : pack.axes.map((a) => picks[a.id]).join('-');
+}
+const thumbOf = (pack, picks) => {
+  const preset = pack.presets.find((p) => p.id === schemeOf(pack, picks));
+  const opt = pack.axes[0]?.options.find((o) => o.id === picks[pack.axes[0].id]);
+  const file = preset?.thumb ?? opt?.thumb ?? pack.thumb;
+  return file ? pack.base + file : null;
+};
+
 function renderFigure() {
-  $('#dress').dataset.figure = skin.figure;
+  $('#dress').dataset.figure = skin.figure === 'coo' ? 'coo' : 'pack';
   const box = $('#optFigure');
   box.textContent = '';
   const opts = el('div', 'opts');
-  for (const [id, label] of FIGURES) {
+  const choices = [{ id: 'coo', label: 'Coo', pic: `<svg viewBox="${CROP.palette}" aria-hidden="true">${mini('neutral', skin)}</svg>` },
+    ...packs.map((p) => {
+      const src = thumbOf(p, picksOf(p, skin.figure === p.id ? skin.scheme : ''));
+      return { id: p.id, label: nameOf(p.name), pic: src ? `<img src="${src}" alt="">` : '' };
+    })];
+  for (const c of choices) {
     const b = el('button', 'opt wide figure');
-    b.setAttribute('aria-pressed', String(skin.figure === id));
-    const pic = id === 'whale'
-      ? `<img src="/web/whale/thumbs/${skin.scheme}.png" alt="" onerror="this.src='/web/whale/thumbs/deepseek.png'">`
-      : `<svg viewBox="${CROP.palette}" aria-hidden="true">${mini('neutral', skin)}</svg>`;
-    b.innerHTML = `${pic}<span>${label}</span>`;
-    b.addEventListener('click', () => { if (skin.figure === id) return; apply({ ...skin, figure: id }, true); sfx.sparkle(); ctl.setExpr('happy'); });
+    b.setAttribute('aria-pressed', String(skin.figure === c.id));
+    b.innerHTML = `${c.pic}<span></span>`;
+    b.querySelector('span').textContent = c.label;
+    b.addEventListener('click', () => {
+      if (skin.figure === c.id) return;
+      const pack = packs.find((p) => p.id === c.id);
+      apply({ ...skin, figure: c.id, ...(pack ? { scheme: schemeOf(pack, picksOf(pack, '')) } : {}) }, true);
+      sfx.sparkle(); ctl.setExpr('happy');
+    });
     opts.appendChild(b);
   }
   box.appendChild(opts);
-  const sch = $('#optScheme');
-  sch.textContent = '';
-  if (!schemes) return;
-  const list = el('div', 'opts');
-  for (const s of schemes) {
-    const b = el('button', 'opt wide');
-    b.setAttribute('aria-pressed', String(skin.scheme === s.id));
-    b.innerHTML = `<img src="/web/whale/thumbs/${s.id}.png" alt=""><span>${s.brand}</span>`;
-    b.addEventListener('click', () => { apply({ ...skin, scheme: s.id }, true); sfx.sparkle(); ctl.setExpr('happy'); ctl.pet.sqv += 1.2; });
-    list.appendChild(b);
+  // a row per axis of the pack on, after the figure row
+  for (const old of document.querySelectorAll('.pack-axis')) old.remove();
+  const pack = packs.find((p) => p.id === skin.figure);
+  if (!pack) return;
+  const picks = picksOf(pack, skin.scheme);
+  let after = box;
+  for (const axis of pack.axes) {
+    const label = el('div', 'row-label pack-axis');
+    label.id = `lbAxis-${axis.id}`;
+    label.textContent = nameOf(axis.name);
+    const slot = el('div', 'slot pack-axis');
+    slot.setAttribute('role', 'group');
+    slot.setAttribute('aria-labelledby', label.id);
+    const list = el('div', 'opts');
+    for (const o of axis.options) {
+      const b = el('button', 'opt wide');
+      b.setAttribute('aria-pressed', String(picks[axis.id] === o.id));
+      b.innerHTML = `${o.thumb ? `<img src="${pack.base}${o.thumb}" alt="">` : ''}<span></span>`;
+      b.querySelector('span').textContent = nameOf(o.name);
+      b.addEventListener('click', () => {
+        apply({ ...skin, scheme: schemeOf(pack, { ...picks, [axis.id]: o.id }) }, true);
+        sfx.sparkle(); ctl.setExpr('happy'); ctl.pet.sqv += 1.2;
+      });
+      list.appendChild(b);
+    }
+    slot.appendChild(list);
+    after.after(label, slot);
+    after = slot;
   }
-  sch.appendChild(list);
 }
 
 function render() {
@@ -174,6 +234,7 @@ function connect() {
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if ((m.t === 'init' || m.t === 'prefs') && (m.theme === 'dark' || m.theme === 'light') && m.theme !== theme) { theme = m.theme; applyTheme(theme, modeBtn); }
+    if (m.t === 'init') loadPacks();
     if ((m.t === 'init' || m.t === 'prefs') && m.skin && JSON.stringify(normalizeSkin(m.skin)) !== JSON.stringify(skin)) apply(normalizeSkin(m.skin), false);
   };
   ws.onclose = () => setTimeout(connect, 2000);

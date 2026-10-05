@@ -10,7 +10,7 @@
 [Cortico](https://github.com/Pal-AI-Lab/Cortico) 的桌宠 World,一个独立的扩展包。
 [Coopanion](https://github.com/Pal-AI-Lab/Coopanion) 桌面上的 Coo 就是它。
 
-bot 在屏幕底边有一个小身体:C 形的身体,两只 0 形的眼睛,两条短腿。它用气泡说话、用选项提问、
+bot 在屏幕底边有一个小身体:内置的 Coo(C 形的身体,两只 0 形的眼睛,两条短腿),或者一个形象包(见下文)。它用气泡说话、用选项提问、
 沿屏幕底边走动、做表情和动作;人可以对它说话(FunASR 在本机识别,Windows 上也可用系统自带的识别)、打字、点选项、戳它、摸它、
 把它拎起来甩出去,这些都作为事件送回 bot。
 
@@ -22,8 +22,11 @@ bot 在屏幕底边有一个小身体:C 形的身体,两只 0 形的眼睛,两�
 | `pet_ask(question, options, allowOwnAnswer)` | 提问气泡,最多 3 个选项,默认再加一格自己写 | 立即返回;回答以 `[回答]` 事件送达 |
 | `pet_walk_to(to, run)` | 走(跑)到桌宠所在屏幕横向 0–1 处,或 `left` `center` `right` `cursor` | 走到或被打断才返回,最多 30 秒 |
 | `pet_act(actions)` | 不说话,依次做一串表情或动作 | 立即返回;`sit` `sleep` 保持到下个动作 |
+| `pet_set(…)` | 改自己的外观和习惯,见「自己调整」 | 自己能改的立即返回;要问的等对方回答 |
+| `pet_quiet(minutes, sound, roam)` | 临时安静:默认关音效、站着不动,到点恢复,设置不变 | 立即返回 |
 
 表情和动作的词表在 `src/script.ts`,英文词与中文名都认;环境提示词 `src/ENV_PROMPT.md` 把它渲染成表格。
+当前形象做不了的词,`pet_say` 和 `pet_act` 的回执会写明换成了哪个词,或者没有做。
 
 ## 事件
 
@@ -33,6 +36,9 @@ bot 在屏幕底边有一个小身体:C 形的身体,两只 0 形的眼睛,两�
 | `desktop-pet.message` | `[打字] 伙伴:…`(悬停按钮;`worlds.desktop-pet.doubleClickChat` 打开时也可双击) | flush |
 | `desktop-pet.answer` | `[回答] 伙伴回答「问题」:选了第 2 项「…」` / 自己写的 / 关掉没答 | flush,关掉没答为 debounce |
 | `desktop-pet.touch` | `[互动] 伙伴戳了你 3 下` / 摸了摸 / 拎起来甩了出去 / 摔晕 | `worlds.desktop-pet.touch.wakeOn` 选中的种类 debounce,其余 piggyback |
+| `desktop-pet.figure` | `[形象] 你现在的样子:…`(对方换了形象或打扮;bot 用 `pet_set` 自己换的不报) / `[形象] …没能显示出来(原因),你现在是 Coo 的样子` | 换装 debounce,显示失败 flush |
+
+每条事件的正文前是对方那边的本地时间 `[HH:MM]`;一次运行的第一条、换了日期后的第一条带日期和星期 `[MM-DD 周X HH:MM]`。
 
 同一种互动 2.5 秒内连着来,并成一条带次数的事件。`wakeOn` 默认 `poke`:只有戳唤醒,摸头、放下和甩出跟着下一批送;鼠标划过桌宠也算摸头,拖开挡路的桌宠也算放下。一条互动按 debounce 送出后,到 bot 下一次结束一轮前,其余互动都按 piggyback 送。「伙伴」取自 `worlds.desktop-pet.user`。
 
@@ -121,9 +127,47 @@ Windows 上经 koffi 轮询 Win32 `GetAsyncKeyState` 读取;macOS 上轮询 Core
 `asr.mic.deviceId` 选麦克风,留空用系统默认;设备列表由桌宠页在拿到麦克风权限后报上来。
 麦克风在「开启语音输入」总开关开着时一直打开,电平条随时显示音量,说话键只决定哪一段送去识别。
 
+## 形象包
+
+除了内置的 Coo,桌宠可以穿上一个形象包。形象包是一个目录,根上有 `figure.json`;内置的大肥鱼在 `web/whale/`,
+其余的从数据目录的 `figures/<目录>/` 和应用给的 `packRoots` 里找。`skin.figure` 是包的 id,`skin.scheme` 是它的打扮。
+
+包里的代码只在沙箱里跑:桌宠页把它放进 `/figure-frame`,这个页面的 CSP 把它设成不透明源、禁止一切网络连接,
+脚本和图片只能从桌宠服务读,和桌宠页之间只有 postMessage(`web/figure-frame.js`、`web/figure-sandbox.js`)。
+它连不到桌宠的 socket,也没法替对方说话或改设置。
+
+`figure.json`(`manifest: 1`,`api: 1`,读取与校验在 `src/packs.ts`):
+
+| 字段 | 含义 |
+|---|---|
+| `id` | 小写字母、数字和 `-`,不能是 `coo`,不能和内置包重名 |
+| `name`、`about` | 按语言的名字;`about` 写这个身体长什么样,原样放进 bot 的环境提示词 |
+| `entry`、`export` | 模块路径和它导出的工厂函数 |
+| `model` | 交给工厂的 JSON(`opts.model`),可省 |
+| `axes` | 打扮的维度,每维一组选项(`id`、`name`、`thumb`);装扮页每维一行 |
+| `presets` | 维度组合的命名,可带 `accent` 和设置窗口配色 `console` |
+| `unsupported` | 做不了的词:换成哪个词,或 `null` 表示不做 |
+| `author`、`license`、`credits`、`thumb`、`version` | 署名与展示 |
+
+`skin.scheme` 是一个预设的 id,或者各维的选项 id 按维度顺序用 `-` 连起来(所以选项 id 里不能有 `-`)。
+
+工厂按 `factory(base, { model, scheme, createRig, loadImage, asset })` 调用,返回 `{ draw(petG, face, frame), anchors?, gestures?, colors?, groupTilt?, setScheme? }`,
+和 `createPet` 的 `opts.figure` 相同;`createRig` 是 `web/rig/rig.js`,`loadImage` 载入能交给 WebGL 的图片(沙箱里直接 `new Image()` 的图 WebGL 读不了)。
+20 秒内没准备好、或者画的时候抛错,桌宠换回 Coo,并告诉 bot。
+
+## 自己调整
+
+`pet_set` 让 bot 改自己的外观和习惯,分两档(`src/self.ts`):
+
+- 直接改:形象和打扮、Coo 的配色和配件、走动多少、呼噜多久;
+- 先在气泡里问对方,同意了才改:音效、大小、黑白模式、悬停按钮、对对方的称呼。
+
+其余设置(语音输入、麦克风、记住位置等)不是 bot 能改的。`worlds.desktop-pet.selfAdjust` 关掉后两档都不能改,`pet_quiet` 也不行。
+`pet_quiet` 只在内存里覆盖音效和走动,不写配置;对方在这期间自己改了音效或走动,就按对方的来。
+
 ## 给内嵌应用
 
-`desktopPetDefinition({ controls, onCreate })` 生成定义:`controls`(`PetBotControls`)给右键菜单借出暂停、设置、退出,
+`desktopPetDefinition({ controls, onCreate, onSkin, packRoots, onBotChange })` 生成定义(`packRoots` 是更多形象包目录,`onBotChange` 在 bot 用 `pet_set` 改了设置之后调用):`controls`(`PetBotControls`)给右键菜单借出暂停、设置、退出,
 借了哪个就只画哪个按钮或菜单行(暂停要 `isPaused` 和 `setPaused`,设置要 `openSettings`,退出要 `quit` 与可选的 `quitLabel`);
 `onCreate` 拿到 World 实例,应用可以调 `world.confirm(问题, [同意, 不同意])` 弹一个两选项气泡,
 结果是 `yes` / `no` / `dismissed` / `timeout`(60 秒没人答) / `unavailable`(没有桌宠页),不会作为事件送给 bot。

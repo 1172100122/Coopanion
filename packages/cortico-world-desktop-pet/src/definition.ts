@@ -14,6 +14,10 @@ export interface DesktopPetAssembly {
   onCreate?(world: DesktopPetWorld): void;
   /** Called after the dressing page saves a look, with that look as saved. */
   onSkin?(skin: PetSkin): void;
+  /** More directories of installed figure packs, besides `figures/` in the data directory. */
+  packRoots?(): string[];
+  /** Called after the bot changed its own settings (`pet_set`). */
+  onBotChange?(): void;
 }
 
 /** The definition, with what an embedding app lends the World. */
@@ -29,13 +33,16 @@ export function desktopPetDefinition(assembly: DesktopPetAssembly = {}): WorldDe
         timezone: ctx.timezone,
         persist: (patch) => {
           ctx.persist(patch);
-          if (patch.skin) assembly.onSkin?.(patch.skin as PetSkin);
+          // the whole look as it now is: a patch may carry only the part that changed
+          if (patch.skin) assembly.onSkin?.(ctx.cfg.skin);
         },
         runtimesRoot,
         modelsDir: () => modelsDirFor(modelsRoot()),
         botName: ctx.botName,
         avatarFile: join(ctx.botDir, AVATAR_FILE),
         controls: assembly.controls,
+        packRoots: () => [join(ctx.dataDir, 'figures'), ...assembly.packRoots?.() ?? []],
+        onBotChange: () => assembly.onBotChange?.(),
       });
       assembly.onCreate?.(world);
       return world;

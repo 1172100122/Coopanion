@@ -85,6 +85,8 @@ export interface DesktopPetConfigSection extends WorldSection {
   hoverButtons: string;
   /** Double-clicking the pet opens the typing box. */
   doubleClickChat: boolean;
+  /** The bot may change its own looks and habits (src/self.ts), and asks before the rest. */
+  selfAdjust: boolean;
   skin: PetSkin;
   touch: {
     /** Clicks, petting and throws become events. */
@@ -124,6 +126,7 @@ export const DESKTOP_PET_DEFAULTS: DesktopPetConfigSection = {
   petX: null,
   hoverButtons: 'chat,voice',
   doubleClickChat: false,
+  selfAdjust: true,
   skin: {
     figure: 'coo', scheme: 'deepseek', palette: 'mint', head: 'none', side: 'none', glasses: 'none', neck: 'none',
     colors: { head: { main: 'body', acc: 'eye' }, side: { main: 'eye', acc: 'eye' }, glasses: { main: 'body', acc: 'eye' }, neck: { main: 'eye', acc: 'eye' } },
@@ -156,6 +159,7 @@ export const DESKTOP_PET_CONFIG_GROUP: ConfigGroup = {
       [`${K}.rememberPosition`]: { type: 'boolean', title: '记住位置', description: '退出时记下桌宠的横向位置,下次启动落回那里;有多块屏幕时总在主屏上启动。', 'x-hot': true },
       [`${K}.hoverButtons`]: { type: 'string', title: '悬停按钮', description: `鼠标停在桌宠身上时旁边出现的按钮,最多 ${MAX_HOVER_BUTTONS} 个,逗号分隔:${PET_ACTIONS.join(', ')}。`, 'x-hot': true },
       [`${K}.doubleClickChat`]: { type: 'boolean', title: '双击打字', description: '双击桌宠打开打字框。', 'x-hot': true },
+      [`${K}.selfAdjust`]: { type: 'boolean', title: '允许自己调整', description: '桌宠可以自己换形象和装扮、改走动和呼噜;改音效、大小、黑白模式、悬停按钮和对你的称呼前先问你。关掉后这些它都改不了。', 'x-hot': true },
       [`${K}.window.enabled`]: { type: 'boolean', title: '启动时打开桌宠窗口', 'x-hot': false },
       [`${K}.window.scale`]: { type: 'number', title: '大小', minimum: .5, maximum: 2, multipleOf: .05, 'x-hot': true },
       [`${K}.window.lockFrameRate`]: { type: 'boolean', title: '锁定 60 帧', description: '一直按每秒 60 帧画桌宠。关着时站着、坐着、睡着降到每秒 30 帧,走动、被拎着、跳起时仍是 60 帧。', 'x-hot': true },

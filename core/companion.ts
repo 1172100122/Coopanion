@@ -50,7 +50,7 @@ import { deploymentRoot, providersRoot, repoRoot } from 'cortico/paths.ts';
 import { providerModules, registerProviderModules } from 'cortico/providers/registry.ts';
 import { withWorlds, type WorldDefinition, type WorldSection } from 'cortico/world.ts';
 import { TERMINAL } from 'cortico/worlds/terminal/definition.ts';
-import { desktopPetDefinition, type DesktopPetWorld } from 'cortico-world-desktop-pet';
+import { desktopPetDefinition, figurePacks, type DesktopPetWorld } from 'cortico-world-desktop-pet';
 import { cuaDefinition } from 'cortico-world-cua';
 import COO, { vendorOf } from 'cortico-provider-coo';
 import { bundledConsoleAssets } from './bundled-panels.ts';
@@ -405,7 +405,8 @@ export async function main(): Promise<void> {
       },
     },
     onCreate: (world) => { pet = world; },
-    onSkin: (skin) => followPetLook(join(deploymentRoot(), DEPLOYMENT), skin),
+    onBotChange: () => (notice as NoticeWorld | null)?.acceptCurrent(),
+    onSkin: (skin) => followPetLook(join(deploymentRoot(), DEPLOYMENT), skin, (pet as DesktopPetWorld | null)?.packs() ?? []),
   });
   const CUA = cuaDefinition({
     askPermission: async (question) => {
@@ -464,7 +465,8 @@ export async function main(): Promise<void> {
   const loaded = loadDeployment(definition, deployDir, repoRoot(), join(repoRoot(), 'bots', 'cormini'), providersRoot());
   config = loaded.config;
   announceDataDir(loaded.dataDir);
-  followPetLook(deployDir, getByPath(loaded.config as unknown as Record<string, unknown>, 'worlds.desktop-pet.skin') as { figure?: string; scheme?: string } | undefined);
+  followPetLook(deployDir, getByPath(loaded.config as unknown as Record<string, unknown>, 'worlds.desktop-pet.skin') as { figure?: string; scheme?: string } | undefined,
+    figurePacks([join(loaded.dataDir, 'figures')]).packs);
   consumeBootFlags(loaded.dataDir);
 
   const bot = createBot(loaded, definition, { extensions });

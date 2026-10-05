@@ -41,6 +41,9 @@ body.desk{background:transparent}
 body.desk .floor{display:none}
 .stage{position:fixed; inset:0; touch-action:none}
 .stage svg{position:absolute; inset:0; width:100%; height:100%; display:block; overflow:visible}
+/* a pack's sandboxed frame: transparent (a colour scheme unlike the frame's would give it a backdrop) and never under the pointer */
+.figure-layer{position:absolute; inset:0; pointer-events:none}
+.figure-layer iframe{position:absolute; inset:0; width:100%; height:100%; border:0; background:transparent; color-scheme:normal; pointer-events:none}
 
 /* figure classes */
 .ink{stroke:var(--skin-ink)} .inkf{fill:var(--skin-ink)} .eye{stroke:var(--skin-eye)}

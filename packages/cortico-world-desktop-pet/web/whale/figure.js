@@ -52,11 +52,13 @@ function loadImage(url) {
  * `opts.raster` shows each frame as an SVG <image> copied from the canvas instead of the canvas itself (slower;
  * for pages that are screen-recorded, where a WebGL canvas inside SVG is not always in the capture).
  * `opts.scheme` picks a colour scheme (model.schemes; default the original); `opts.model` (model.json
- * already parsed) and `opts.asset(path)` (a texture's URL) are for pages that bundle the files.
+ * already parsed) and `opts.asset(path)` (a texture's URL) are for pages that bundle the files;
+ * `opts.loadImage` is the figure frame's (figure-frame.js), which loads images WebGL may read there.
  */
 export async function createWhaleFigure(base = new URL('./', import.meta.url), opts = {}) {
   const model = opts.model || await (await fetch(new URL('model.json', base))).json();
   const asset = opts.asset || (p => new URL(p, base));
+  const load = opts.loadImage || loadImage;
   const { S, X0, FEET } = model.units;
   const U = x => 128 + (x - X0) * S, V = y => 256 - (FEET - y) * S;
   const PV = model.pivots, feat = model.feat;
@@ -73,8 +75,8 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     const dir = id === SCHEMES[0].id ? '' : `schemes/${id}/`;
     const set = { tex: {}, img: {} };
     loaded[id] = Promise.all([
-      ...model.parts.map(async p => { set.tex[p.tex] = await loadImage(asset(`${dir}tex/${p.tex}.png`)); }),
-      ...featNames.map(async n => { set.img[n] = await loadImage(asset(`${dir}feat/${n}.png`)); }),
+      ...model.parts.map(async p => { set.tex[p.tex] = await load(asset(`${dir}tex/${p.tex}.png`)); }),
+      ...featNames.map(async n => { set.img[n] = await load(asset(`${dir}feat/${n}.png`)); }),
     ]).then(() => (ready[id] = set));
     return loaded[id];
   }

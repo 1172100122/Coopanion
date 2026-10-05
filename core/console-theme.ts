@@ -1,8 +1,8 @@
 /**
- * The settings window's colours follow the pet's look. Coo wears Cortico's `mint`; each colour scheme
- * of the DeepSeek whale maid (packages/cortico-world-desktop-pet/web/whale/model.json) has a console
- * scheme here, written into the deployment's `theme.json` as custom schemes so the appearance page
- * lists them too. The large surfaces stay neutral grey for every scheme; the brand colour goes to the
+ * The settings window's colours follow the pet's look. Coo wears Cortico's `mint`; each preset of a
+ * figure pack that gives settings-window colours (`presets[].console` in its figure.json, the whale's
+ * eight schemes among them) has a console scheme here, written into the deployment's `theme.json` as
+ * custom schemes so the appearance page lists them too. The large surfaces stay neutral grey for every scheme; the brand colour goes to the
  * accent, the timeline's text colours and the charts.
  *
  * The window follows the pet while its scheme is `mint` or one of these. A scheme the person picked
@@ -11,6 +11,7 @@
  */
 import { readDeploymentTheme, writeDeploymentTheme } from 'cortico/web/theme-store.ts';
 import { defaultStoredTheme, normalizeStoredTheme, type ThemePalette, type ThemeScheme } from 'cortico/web/shared/theme.ts';
+import type { FigurePack } from 'cortico-world-desktop-pet';
 
 /** The scheme Coo wears: the app's default (`web.theme` in companion.ts). */
 export const COO_SCHEME = 'mint';
@@ -54,83 +55,48 @@ const palette = (neutral: ThemePalette, h: Hues): ThemePalette => ({
   'chart-output': h.a, 'chart-1': h.a, 'chart-2': h.a2, 'chart-3': h.c3, 'chart-4': h.c4,
 });
 
-/**
- * Per whale scheme id, the light and the dark hues. The light accents of DeepSeek, Gemini, Qwen and
- * Kimi are a shade darker than the brand colour, which carries white text at only 3.6–4.3:1.
- */
-const WHALE_HUES: ReadonlyArray<{ id: string; brand: string; label: string; light: Hues; dark: Hues }> = [
-  {
-    id: 'deepseek', brand: 'DeepSeek', label: '原版',
-    light: { a: '#4562f5', a2: '#7b90fe', on: '#ffffff', t: '#3550d6', c3: '#8ea0c8', c4: '#8a8a90' },
-    dark: { a: '#7b93ff', a2: '#a3b3ff', on: '#0d1640', t: '#9aabff', c3: '#8ea0c8', c4: '#9a9aa0' },
-  },
-  {
-    id: 'harness', brand: 'DeepSeek Harness', label: '纯黑',
-    light: { a: '#3f3f44', a2: '#4d6bfe', on: '#ffffff', t: '#2e2e33', c3: '#7b7b82', c4: '#a6a6ac' },
-    dark: { a: '#d2d2d7', a2: '#7b93ff', on: '#151518', t: '#c8c8cd', c3: '#8c8c93', c4: '#64646a' },
-  },
-  {
-    id: 'chatgpt', brand: 'ChatGPT', label: '银白',
-    light: { a: '#2f2f2f', a2: '#8e8ea0', on: '#ffffff', t: '#202123', c3: '#10a37f', c4: '#b4b4c0' },
-    dark: { a: '#ececf1', a2: '#a9a9b8', on: '#202123', t: '#d9d9e3', c3: '#19c37d', c4: '#6e6e80' },
-  },
-  {
-    id: 'claude', brand: 'Claude', label: '赤陶',
-    light: { a: '#d97757', a2: '#c2928a', on: '#1f0f08', t: '#a84e2f', c3: '#7b7974', c4: '#c6a58c' },
-    dark: { a: '#e08a6c', a2: '#d9a497', on: '#1f0f08', t: '#eba287', c3: '#97958d', c4: '#c6a58c' },
-  },
-  {
-    id: 'gemini', brand: 'Gemini', label: '四色',
-    light: { a: '#1a73e8', a2: '#34a853', on: '#ffffff', t: '#1a5fd0', c3: '#ea4335', c4: '#f9ab00' },
-    dark: { a: '#8ab4f8', a2: '#81c995', on: '#0b1a33', t: '#8ab4f8', c3: '#f28b82', c4: '#fdd663' },
-  },
-  {
-    id: 'qwen', brand: '千问', label: '紫',
-    light: { a: '#7560ea', a2: '#a294f5', on: '#ffffff', t: '#5b45d0', c3: '#b8a9e8', c4: '#8a8a90' },
-    dark: { a: '#a596ff', a2: '#c2b8ff', on: '#1a1240', t: '#b3a6ff', c3: '#8f82c9', c4: '#9a9aa0' },
-  },
-  {
-    id: 'kimi', brand: 'Kimi', label: '黑蓝',
-    light: { a: '#0072ea', a2: '#1b1b1f', on: '#ffffff', t: '#0062cc', c3: '#6fa8e8', c4: '#8a8a90' },
-    dark: { a: '#4da3ff', a2: '#9ccaff', on: '#001a38', t: '#6fb3ff', c3: '#d0d0d4', c4: '#6a8fb8' },
-  },
-  {
-    id: 'minimax', brand: 'MiniMax', label: '玫红橙',
-    light: { a: '#d92d7a', a2: '#f2762e', on: '#ffffff', t: '#b51f62', c3: '#e8a0c0', c4: '#8a8a90' },
-    dark: { a: '#f0619e', a2: '#ff9a5c', on: '#2a0617', t: '#f58ab6', c3: '#c97aa0', c4: '#9a9aa0' },
-  },
-];
+const nameZh = (n: Record<string, string> | undefined, fallback: string) => n?.zh ?? (n ? Object.values(n)[0] : undefined) ?? fallback;
 
-const schemeId = (whale: string) => `coo-whale-${whale}`;
+/** The whale's ids from before packs (`coo-whale-<scheme>`) stay, so a theme.json written then still matches. */
+const schemeId = (figure: string, preset: string) => (figure === 'whale' ? `coo-whale-${preset}` : `coo-fig-${figure}-${preset}`);
+const isFigureScheme = (id: string) => id.startsWith('coo-whale-') || id.startsWith('coo-fig-');
 
-export const WHALE_SCHEMES: readonly ThemeScheme[] = WHALE_HUES.map((w) => ({
-  id: schemeId(w.id),
-  name: `大肥鱼 · ${w.brand}`,
-  note: `桌宠换成大肥鱼的「${w.label}」配色时自动换上`,
-  palettes: { light: palette(NEUTRAL_LIGHT, w.light), dark: palette(NEUTRAL_DARK, w.dark) },
-  custom: true,
-}));
+/** A console scheme for each preset of each pack that gives settings-window colours (`presets[].console`). */
+export function figureSchemes(packs: readonly FigurePack[]): ThemeScheme[] {
+  return packs.flatMap((pack) => {
+    const figure = nameZh(pack.manifest.name, pack.id);
+    return pack.manifest.presets.filter((p) => p.console).map((p) => {
+      const preset = nameZh(p.name, p.id);
+      return {
+        id: schemeId(pack.id, p.id),
+        name: `${figure} · ${preset}`,
+        note: `桌宠换成${figure}的「${preset}」时自动换上`,
+        palettes: { light: palette(NEUTRAL_LIGHT, p.console!.light), dark: palette(NEUTRAL_DARK, p.console!.dark) },
+        custom: true,
+      };
+    });
+  });
+}
 
-const WHALE_IDS = new Set(WHALE_SCHEMES.map((s) => s.id));
-
-/** The console scheme for a pet look; a whale scheme this file does not know gets the original's. */
-export function schemeForSkin(skin: { figure?: string; scheme?: string } | undefined): string {
-  if (skin?.figure !== 'whale') return COO_SCHEME;
-  const id = schemeId(skin.scheme ?? '');
-  return WHALE_IDS.has(id) ? id : schemeId('deepseek');
+/** The console scheme for a pet look: Coo's, or the pack preset's (its first with colours for a pick that is not a preset). */
+export function schemeForSkin(skin: { figure?: string; scheme?: string } | undefined, packs: readonly FigurePack[]): string {
+  const pack = packs.find((p) => p.id === skin?.figure);
+  const presets = pack?.manifest.presets.filter((p) => p.console) ?? [];
+  if (!pack || !presets.length) return COO_SCHEME;
+  return schemeId(pack.id, (presets.find((p) => p.id === skin?.scheme) ?? presets[0]!).id);
 }
 
 /**
- * Brings `<deployDir>/theme.json` in line with the pet's look: the whale schemes as they are in this
- * version, and the selection per the rule at the top. Writes only when something changed.
+ * Brings `<deployDir>/theme.json` in line with the pet's look: the packs' schemes as they are now,
+ * and the selection per the rule at the top. Writes only when something changed.
  */
-export function followPetLook(deployDir: string, skin: { figure?: string; scheme?: string } | undefined): void {
+export function followPetLook(deployDir: string, skin: { figure?: string; scheme?: string } | undefined, packs: readonly FigurePack[]): void {
   const state = readDeploymentTheme(deployDir).state ?? { ...defaultStoredTheme(), selectedId: COO_SCHEME };
-  const follows = state.selectedId === COO_SCHEME || WHALE_IDS.has(state.selectedId);
+  const follows = state.selectedId === COO_SCHEME || isFigureScheme(state.selectedId);
   const next = normalizeStoredTheme({
     ...state,
-    selectedId: follows ? schemeForSkin(skin) : state.selectedId,
-    custom: [...state.custom.filter((s) => !WHALE_IDS.has(s.id)), ...WHALE_SCHEMES],
+    selectedId: follows ? schemeForSkin(skin, packs) : state.selectedId,
+    custom: [...state.custom.filter((s) => !isFigureScheme(s.id)), ...figureSchemes(packs)],
   });
   if (JSON.stringify(next) !== JSON.stringify(state)) writeDeploymentTheme(deployDir, next);
 }

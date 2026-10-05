@@ -9,6 +9,7 @@
  * Colors follow the World's `theme` through `data-theme` on the root element.
  */
 import { applyTheme, createPet, createSfx, clamp, f, mini, normalizeSkin, skinCss, EXPRESSIONS, HEAD_TOP, ICONS } from './pet-core.js';
+import { loadPackFigure } from './figure-sandbox.js';
 
 const $ = (s) => document.querySelector(s);
 const host = window.petHost || null;
@@ -74,20 +75,39 @@ function connect() {
 }
 connect();
 
-/* ---------- the body: Coo, or the DeepSeek whale maid (web/whale, loaded the first time it is chosen) ---------- */
-let whale = null, wanted = 'coo';
+/*
+ * ---------- the body: Coo, or a figure pack (src/packs.ts) drawn in a sandboxed frame ----------
+ * The World hears which body is on screen (`figure`), so the bot is told of a switch, and of a pack that
+ * would not load or broke while drawing (no usable WebGL, a missing texture, a bug in its code): the page
+ * then shows Coo instead of a body that throws on every frame.
+ */
+let wanted = 'coo';
+/** The pack's body on screen, or null for Coo. */
+let packBody = null;
+function reportFigure(id, ok, reason, scheme) { send({ t: 'figure', id, ok, ...(scheme ? { scheme } : {}), ...(reason ? { reason } : {}) }); }
+function bodyFailed(id, err) {
+  console.error(err);
+  if (packBody?.id === id) packBody = null;
+  if (ctl.figure?.pack === id) ctl.setFigure(null);
+  reportFigure(id, false, String(err?.message ?? err));
+}
 async function applyFigure(s) {
   wanted = s.figure;
-  if (s.figure !== 'whale') { ctl.setFigure(null); return; }
-  whale ??= import('./whale/figure.js').then((m) => m.createWhaleFigure(undefined, { scheme: s.scheme }));
-  const fig = await whale;
-  if (wanted !== 'whale') return;
-  // a scheme picked while she is on screen fades in
-  await fig.setScheme(s.scheme, { fade: ctl.figure === fig ? .45 : 0, at: ctl.time });
-  // mounting her takes a WebGL context, which a machine without usable GL (a blocklisted GPU and no
-  // software fallback) refuses: fall back to the built-in Coo instead of leaving a body that throws
-  // every frame it is drawn
-  try { ctl.setFigure(fig); } catch (err) { console.error(err); ctl.setFigure(null); }
+  if (s.figure === 'coo') { packBody = null; ctl.setFigure(null); reportFigure('coo', true); return; }
+  try {
+    // a pick changed while the same pack is on screen fades in
+    if (packBody?.id === s.figure) { await packBody.fig.setScheme(s.scheme, { fade: .45, at: ctl.time }); reportFigure(s.figure, true, null, s.scheme); return; }
+    const pack = (await (await fetch('/api/figures')).json()).find((p) => p.id === s.figure);
+    if (!pack) throw new Error('没有装这个形象');
+    const fig = await loadPackFigure({ layer: $('#figureLayer'), pack, scheme: s.scheme, onError: (err) => bodyFailed(s.figure, err) });
+    if (wanted !== s.figure) { fig.dispose(); return; }
+    await fig.setScheme(s.scheme, { fade: 0, at: ctl.time });
+    packBody = { id: s.figure, fig };
+    ctl.setFigure(fig);
+    reportFigure(s.figure, true, null, s.scheme);
+  } catch (err) {
+    bodyFailed(s.figure, err);
+  }
 }
 
 /**
@@ -1248,7 +1268,10 @@ function stepBackdrop(dt) {
   }
   const k = backdrop.k + ((backdrop.on ? 1 : 0) - backdrop.k) * Math.min(1, dt * 6);
   backdrop.k = k < .005 ? 0 : k;
-  if (backdrop.k) { haloFlood.setAttribute('flood-opacity', (backdrop.k * HALO_STRENGTH).toFixed(2)); petG.setAttribute('filter', 'url(#halo)'); }
+  // a pack's body is in its own frame, outside the SVG filter's reach: it takes the halo as a CSS filter
+  const pack = ctl.figure?.setHalo ? ctl.figure : null;
+  pack?.setHalo(backdrop.k * HALO_STRENGTH);
+  if (backdrop.k && !pack) { haloFlood.setAttribute('flood-opacity', (backdrop.k * HALO_STRENGTH).toFixed(2)); petG.setAttribute('filter', 'url(#halo)'); }
   else petG.removeAttribute('filter');
 }
 
