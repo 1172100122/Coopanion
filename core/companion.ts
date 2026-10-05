@@ -237,6 +237,56 @@ function hintFailures(core: Core<CoreConfig>, config: CoreConfig, pet: () => Des
   };
 }
 
+const UPDATE_TEXT = {
+  zh: {
+    downloading: (v: string) => `发现新版本 ${v},正在后台下载,下好了我再告诉你。下载卡住的话,也可以去 GitHub 手动下载安装。`,
+    ready: (v: string) => `新版本 ${v} 下载好了。现在重启更新吗?不急的话,下次退出应用时会自动装上。`,
+    failed: (v: string, why: string) => `新版本 ${v} 没能下载下来:${why}。可以去 GitHub 手动下载安装。`,
+    ok: '好', github: '去 GitHub 下载', install: '现在重启更新', later: '下次再说', gotIt: '知道了',
+  },
+  en: {
+    downloading: (v: string) => `Version ${v} is out and downloading in the background; I'll tell you when it's ready. If the download stalls, you can get it from GitHub yourself.`,
+    ready: (v: string) => `Version ${v} is downloaded. Restart to update now? Otherwise it installs the next time you quit the app.`,
+    failed: (v: string, why: string) => `Version ${v} did not download: ${why}. You can get it from GitHub yourself.`,
+    ok: 'OK', github: 'Download from GitHub', install: 'Restart and update', later: 'Later', gotIt: 'OK',
+  },
+};
+
+interface UpdateStep { phase: 'downloading' | 'ready' | 'failed'; version: string; reason?: string }
+
+/**
+ * Says the updater's steps (app/updater.cjs) in the pet's bubble: once each, when the pet page is
+ * there and the introduction is not running; a newer step replaces one not yet said.
+ */
+function sayUpdates(config: CoreConfig, pet: () => DesktopPetWorld | null, guiding: () => boolean): (step: UpdateStep) => void {
+  let pending: UpdateStep | null = null;
+  const said = new Set<string>();
+  const S = () => pick(config.language ?? 'zh', UPDATE_TEXT);
+  setInterval(() => {
+    const p = pet();
+    if (!pending || guiding() || !p?.petState().connected) return;
+    const step = pending;
+    pending = null;
+    const s = S();
+    const [text, options] = step.phase === 'downloading' ? [s.downloading(step.version), [{ label: s.ok, primary: true }, { label: s.github }]]
+      : step.phase === 'ready' ? [s.ready(step.version), [{ label: s.install, primary: true }, { label: s.later }]]
+        : [s.failed(step.version, step.reason ?? '?'), [{ label: s.github, primary: true }, { label: s.gotIt }]];
+    void p.dialog({ text, actions: [step.phase === 'failed' ? 'sad' : 'happy'], closable: true, input: { kind: 'buttons', options } }).answer.then((a) => {
+      if ('unavailable' in a) { pending ??= step; return; }
+      if (!('index' in a)) return;
+      const github = (step.phase === 'downloading' && a.index === 1) || (step.phase === 'failed' && a.index === 0);
+      if (github) process.send?.({ type: 'companion:releases' });
+      if (step.phase === 'ready' && a.index === 0) process.send?.({ type: 'companion:update-install' });
+    });
+  }, 2000).unref();
+  return (step) => {
+    const key = `${step.phase}:${step.version}`;
+    if (said.has(key)) return;
+    said.add(key);
+    pending = step;
+  };
+}
+
 /** Files in the workspace (Coo's memory), `.git` left out; stops counting at `cap`. */
 function countFiles(dir: string, cap = 10_000): number {
   let n = 0;
@@ -467,7 +517,13 @@ export async function main(): Promise<void> {
     ]);
     process.exit(done ? 0 : 1);
   };
-  process.on('message', (msg: { type?: string }) => { if (msg?.type === 'companion:shutdown') void shutdown('应用退出'); });
+  const update = sayUpdates(loaded.config, () => pet, () => guiding);
+  process.on('message', (msg: { type?: string } & Partial<UpdateStep>) => {
+    if (msg?.type === 'companion:shutdown') void shutdown('应用退出');
+    else if (msg?.type === 'companion:update' && typeof msg.version === 'string' && (msg.phase === 'downloading' || msg.phase === 'ready' || msg.phase === 'failed')) {
+      update({ phase: msg.phase, version: msg.version, reason: typeof msg.reason === 'string' ? msg.reason : undefined });
+    }
+  });
   process.on('disconnect', () => void shutdown('应用进程已退出'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));

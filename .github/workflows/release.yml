@@ -17,7 +17,7 @@ jobs:
         include:
           - os: windows-latest
             arch: x64
-            files: dist/Coopanion-Setup-*.exe
+            files: dist/Coopanion-Setup-*.exe dist/Coopanion-Setup-*.exe.blockmap dist/latest.yml
           - os: macos-latest
             arch: arm64
             files: dist/Coopanion-*-mac-arm64.dmg dist/Coopanion-*-mac-arm64.zip
@@ -26,7 +26,7 @@ jobs:
             files: dist/Coopanion-*-mac-x64.dmg dist/Coopanion-*-mac-x64.zip
           - os: ubuntu-latest
             arch: x64
-            files: dist/Coopanion-*-linux-x64.AppImage dist/Coopanion-*-linux-x64.deb
+            files: dist/Coopanion-*-linux-x64.AppImage dist/Coopanion-*-linux-x64.deb dist/latest-linux.yml
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +72,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           cd release-artifacts
           files=("Coopanion-Setup-${version}.exe" "Coopanion-${version}-mac-arm64.dmg" "Coopanion-${version}-mac-arm64.zip" "Coopanion-${version}-mac-x64.dmg" "Coopanion-${version}-mac-x64.zip" "Coopanion-${version}-linux-x64.AppImage" "Coopanion-${version}-linux-x64.deb")
-          for file in "${files[@]}"; do test -s "$file"; done
+          for file in "${files[@]}" latest.yml latest-linux.yml; do test -s "$file"; done
           sha256sum "${files[@]}" > SHA256SUMS.txt
           cd ..
           notes="docs/releases/${GITHUB_REF_NAME}.md"

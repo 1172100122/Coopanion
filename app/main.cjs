@@ -61,6 +61,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 const { CoreHost } = require('./core-host.cjs');
+const { RELEASES_URL, startUpdater } = require('./updater.cjs');
 
 const userData = app.getPath('userData');
 const shimDir = join(__dirname, 'shims');
@@ -92,6 +93,9 @@ const core = new CoreHost({
 let settings = null;
 let tray = null;
 let quitting = false;
+let updater = null;
+/** The updater's last step, told again to a Core that starts after it (`core/companion.ts` says it in the bubble). */
+let updateStep = null;
 
 const consoleUrl = (path = '') => (core.port ? `http://127.0.0.1:${core.port}/${path}` : null);
 
@@ -205,7 +209,10 @@ function buildTray() {
 
 core.on('ready', () => {
   if (settings) settings.loadURL(consoleUrl());
+  if (updateStep) core.send(updateStep);
 });
+core.on('update-install', () => updater?.installNow());
+core.on('releases', () => void shell.openExternal(RELEASES_URL));
 core.on('state', (state, detail) => {
   if (!detail) return;
   if (Notification.isSupported()) new Notification({ title: 'Coopanion', body: detail, icon: join(ICONS, 'icon.png') }).show();
@@ -229,7 +236,11 @@ app.on('before-quit', (e) => {
   if (quitting) return;
   quitting = true;
   e.preventDefault();
-  void core.stop().finally(() => app.exit(0));
+  void core.stop().finally(() => {
+    // a downloaded update installs now; its quit comes back here with quitting set and goes through
+    if (updater?.installOnQuit()) setTimeout(() => app.exit(0), 10_000);
+    else app.exit(0);
+  });
 });
 
 app.whenReady().then(() => {
@@ -237,4 +248,8 @@ app.whenReady().then(() => {
   buildTray();
   noteAutostart();
   core.start();
+  updater = startUpdater({
+    logDir: join(userData, 'logs'),
+    tell: (step) => { updateStep = { type: 'companion:update', ...step }; core.send(updateStep); },
+  });
 });

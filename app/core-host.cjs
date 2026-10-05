@@ -73,6 +73,10 @@ class CoreHost extends EventEmitter {
         this.emit('hide');
       } else if (msg?.type === 'companion:quit') {
         this.emit('quit');
+      } else if (msg?.type === 'companion:update-install') {
+        this.emit('update-install');
+      } else if (msg?.type === 'companion:releases') {
+        this.emit('releases');
       }
     });
     child.on('exit', (code, signal) => {
@@ -101,6 +105,11 @@ class CoreHost extends EventEmitter {
       this.emit('state', this.state, `Core 意外退出(退出码 ${code}),3 秒后重启`);
       setTimeout(() => { if (!this.stopping) this.start(); }, 3000);
     });
+  }
+
+  /** Sends a message to the running child; dropped while there is none. */
+  send(msg) {
+    try { this.child?.send(msg); } catch { /* channel closing */ }
   }
 
   /** Asks for a clean shutdown; kills the child if it has not exited within `graceMs`. */
