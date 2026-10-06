@@ -150,6 +150,8 @@ function applyPrefs(p) {
   if (p.voice && typeof p.voice === 'object') prefs.voice = { ...prefs.voice, ...p.voice };
   if (typeof p.doubleClickChat === 'boolean') prefs.doubleClickChat = p.doubleClickChat;
   if (typeof p.lockFrameRate === 'boolean') prefs.lockFrameRate = p.lockFrameRate;
+  // the window process does the hiding; the page only passes the setting on
+  if (typeof p.hideWhenFullscreen === 'boolean') host?.hideWhenFullscreen?.(p.hideWhenFullscreen);
   if (Array.isArray(p.hoverButtons)) prefs.hoverButtons = p.hoverButtons.filter((id) => typeof id === 'string' && id in ACTIONS);
   if (p.bot) { prefs.bot = p.bot; if (!menu.hidden && !menu.querySelector('.m-head.confirm')) renderMenuHead(); }
   if (typeof p.thinking === 'boolean') ctl.setThinking(p.thinking);
