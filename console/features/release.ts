@@ -6,17 +6,14 @@ import { pick } from '../core/language.ts';
 import { APP_VERSION } from '../app-version.ts';
 
 export const REPO_URL = 'https://github.com/Pal-AI-Lab/Coopanion';
-const RELEASE_API = 'https://api.github.com/repos/Pal-AI-Lab/Coopanion/releases/latest';
-/** 与 Cortico 控制台查框架 Release 同一时限。 */
-const RELEASE_TIMEOUT_MS = 15_000;
 
 const S = pick({
   zh: {
-    repoHint: '在 GitHub 上打开 Coopanion 项目',
+    repoHint: '查看 Coopanion 上游源码（本定制版不自动更新）',
     update: (latest: string) => `Coopanion ${latest} 已发布,点这里下载更新`,
   },
   en: {
-    repoHint: 'Open the Coopanion project on GitHub',
+    repoHint: 'View Coopanion upstream source (automatic updates disabled in this fork)',
     update: (latest: string) => `Coopanion ${latest} is out: download the update`,
   },
 });
@@ -38,20 +35,9 @@ export function isNewer(latest: string, current: string): boolean {
   return false;
 }
 
-/** 一次启动只查一次;左栏换模式重建时复用同一个结果。 */
-let pending: Promise<ReleaseUpdate | null> | null = null;
-
+/** This fork has no release channel; upstream binaries do not contain Hachimist. */
 export function checkRelease(): Promise<ReleaseUpdate | null> {
-  pending ??= fetch(RELEASE_API, { headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(RELEASE_TIMEOUT_MS) })
-    .then((res) => (res.ok ? res.json() as Promise<{ tag_name?: unknown; html_url?: unknown }> : null))
-    .then((release) => {
-      if (typeof release?.tag_name !== 'string' || typeof release.html_url !== 'string') return null;
-      const url = new URL(release.html_url);
-      if (url.protocol !== 'https:' || url.hostname !== 'github.com') return null;
-      return isNewer(release.tag_name, APP_VERSION) ? { version: release.tag_name.replace(/^v/, ''), url: url.href } : null;
-    })
-    .catch(() => null);
-  return pending;
+  return Promise.resolve(null);
 }
 
 function link(doc: Document, className: string, text: string, href: string): HTMLAnchorElement {

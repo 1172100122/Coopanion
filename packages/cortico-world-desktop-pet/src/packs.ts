@@ -225,6 +225,7 @@ export interface PackScan { packs: FigurePack[]; problems: string[] }
 
 /** The packs that ship with the World: directory and the URL path the pages load it from. */
 export const BUILTIN_PACKS: ReadonlyArray<{ dir: string; base: string }> = [
+  { dir: fileURLToPath(new URL('../web/hachimist/', import.meta.url)), base: '/web/hachimist/' },
   { dir: fileURLToPath(new URL('../web/coo/', import.meta.url)), base: '/web/coo/' },
   { dir: fileURLToPath(new URL('../web/whale/', import.meta.url)), base: '/web/whale/' },
 ];

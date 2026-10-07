@@ -14,10 +14,10 @@ const word = { id: 'beep', kind: 'motion', names: { zh: ['哔'] }, about: { zh: 
 const base = { manifest: 2, api: 2, id: 'robot', name: { zh: '机器人' }, about: { zh: '一个机器人' }, entry: 'figure.js', export: 'createBody', axes: [], presets: [], vocab: [word] };
 
 describe('figure packs', () => {
-  it('reads the built-in Coo and whale', () => {
+  it('reads the built-in Hachimist, Coo and whale', () => {
     const { packs, problems } = figurePacks([]);
     expect(problems).toEqual([]);
-    expect(packs.map((p) => p.id)).toEqual(['coo', 'whale']);
+    expect(packs.map((p) => p.id)).toEqual(['hachimist', 'coo', 'whale']);
   });
 
   it('refuses a pack whose files lie outside it', () => {

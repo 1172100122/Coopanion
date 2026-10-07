@@ -5,7 +5,7 @@
  * and the run resumed), then the pet (live preview, show, a button to the dressing page). Dressing up,
  * voice input and computer use have their own pages (features/dress, features/voice, features/cua); the link
  * to other model services shows with or without a key, and in the normal mode asks before it
- * switches to the advanced mode, where the model pages are; 「使用引导」 at the top has Coo run its
+ * switches to the advanced mode, where the model pages are; 「使用引导」 at the top has Hachimist run its
  * introduction again on the desktop (the app's Core holds it; this window steps aside for it).
  * Saving and testing the key lives in model.ts. Every
  * control calls an endpoint the rest of the console already uses. Styles are in home.css, which
@@ -22,7 +22,7 @@ const PET_PAGE = 'world:desktop-pet';
 const S = pick({
   zh: {
     nav: '开始',
-    title: 'Coo',
+    title: 'Hachimist',
     running: '醒着',
     paused: '暂停中',
     noModel: '还没连上模型',
@@ -42,7 +42,7 @@ const S = pick({
     testing: '正在测试…',
     testOk: (ms: number | null) => `连接正常${ms !== null ? `,耗时 ${ms} ms` : ''}`,
     testFail: (why: string) => `连接失败:${why}`,
-    started: '好了,Coo 醒了。',
+    started: '好了,Hachimist 醒了。',
     petTitle: '桌宠',
     petShown: '在桌面上',
     petHidden: '没有显示',
@@ -50,11 +50,11 @@ const S = pick({
     dress: '装扮',
     petNote: '鼠标停在桌宠身上会出现打字和麦克风两个按钮;右键打开菜单;按住可以拎起来。',
     guide: '使用引导',
-    guideHint: '让 Coo 在屏幕底边再带你走一遍',
+    guideHint: '让 Hachimist 在屏幕底边再带你走一遍',
   },
   en: {
     nav: 'Start',
-    title: 'Coo',
+    title: 'Hachimist',
     running: 'Awake',
     paused: 'Paused',
     noModel: 'No model connected',
@@ -74,7 +74,7 @@ const S = pick({
     testing: 'Testing…',
     testOk: (ms: number | null) => `Connection works${ms !== null ? `, ${ms} ms` : ''}`,
     testFail: (why: string) => `Connection failed: ${why}`,
-    started: 'Done. Coo is awake.',
+    started: 'Done. Hachimist is awake.',
     petTitle: 'Desktop pet',
     petShown: 'On the desktop',
     petHidden: 'Not shown',
@@ -82,7 +82,7 @@ const S = pick({
     dress: 'Dress up',
     petNote: 'Hover the pet for the typing and microphone buttons; right-click for the menu; hold it to pick it up.',
     guide: 'Guide',
-    guideHint: 'Coo walks you through it again at the bottom of the screen',
+    guideHint: 'Hachimist walks you through it again at the bottom of the screen',
   },
 });
 

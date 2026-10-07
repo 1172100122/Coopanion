@@ -14,6 +14,9 @@ const ctx = { role: 'main', log: new FakeHost().log };
 
 function makeWorld(patch: (c: DesktopPetConfigSection) => void = () => {}, extra: Partial<DesktopPetWorldOptions> = {}) {
   const cfg = structuredClone(DESKTOP_PET_DEFAULTS);
+  // These protocol fixtures exercise Coo's complete expression/motion vocabulary.
+  cfg.skin.figure = 'coo';
+  cfg.skin.scheme = 'deepseek';
   cfg.enabled = true;
   cfg.port = 0;
   cfg.window.enabled = false;

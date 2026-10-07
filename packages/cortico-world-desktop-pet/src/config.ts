@@ -27,7 +27,7 @@ export function hoverButtonList(value: string): PetAction[] {
  * a figure pack's are `scheme` (src/packs.ts).
  */
 export interface PetSkin {
-  /** The figure pack on screen: coo (built in), whale (built in, web/whale) or an installed pack's id. */
+  /** The figure pack on screen: hachimist, coo or whale (built in) or an installed pack's id. */
   figure?: string;
   /** The pack's pick: a preset id, or its axes' options joined by `-`. */
   scheme?: string;
@@ -134,7 +134,7 @@ export const DESKTOP_PET_DEFAULTS: DesktopPetConfigSection = {
   doubleClickChat: false,
   selfAdjust: true,
   skin: {
-    figure: 'coo', scheme: 'deepseek', palette: 'mint', head: 'none', side: 'none', glasses: 'none', neck: 'none',
+    figure: 'hachimist', scheme: 'original', palette: 'mint', head: 'none', side: 'none', glasses: 'none', neck: 'none',
     colors: { head: { main: 'body', acc: 'eye' }, side: { main: 'eye', acc: 'eye' }, glasses: { main: 'body', acc: 'eye' }, neck: { main: 'eye', acc: 'eye' } },
   },
   touch: { enabled: true, wakeOn: 'poke' },

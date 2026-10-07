@@ -14,9 +14,9 @@ describe('first-run seed', () => {
     const home = mkdtempSync(join(tmpdir(), 'cc-seed-'));
     seed(home);
     expect(read(join(home, DEPLOYMENT, 'deployment.json'))).toEqual({ bot: 'cormini' });
-    expect(read(join(home, DEPLOYMENT, 'config.json'))).toMatchObject({ activeProvider: ENDPOINT, language: 'zh' });
+    expect(read(join(home, DEPLOYMENT, 'config.json'))).toMatchObject({ activeProvider: ENDPOINT, language: 'zh', displayName: 'Hachimist' });
     expect(read(join(home, 'providers', ENDPOINT, 'config.json'))).toMatchObject({ kind: 'coo', secret: KEY_NAME, multimodal: true });
-    expect(readFileSync(join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md'), 'utf8')).toContain('我叫 Coo');
+    expect(readFileSync(join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md'), 'utf8')).toContain('我叫 Hachimist');
     expect(readFileSync(join(home, DEPLOYMENT, 'avatar.png')).subarray(1, 4).toString()).toBe('PNG');
   });
 
@@ -52,8 +52,11 @@ describe('first-run seed', () => {
     writeFileSync(cfg, JSON.stringify({ displayName: 'mine' }));
     const constitution = join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md');
     writeFileSync(constitution, '# 我自己写的');
+    const avatar = join(home, DEPLOYMENT, 'avatar.png');
+    writeFileSync(avatar, 'my-avatar');
     seed(home);
     expect(read(cfg)).toEqual({ displayName: 'mine' });
     expect(readFileSync(constitution, 'utf8')).toBe('# 我自己写的');
+    expect(readFileSync(avatar, 'utf8')).toBe('my-avatar');
   });
 });

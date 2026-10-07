@@ -13,13 +13,15 @@ const { app } = require('electron');
 const { createWriteStream, mkdirSync } = require('node:fs');
 const { join } = require('node:path');
 
+// This customization has no signed release channel. Upstream updates would replace its character.
+const AUTO_UPDATES_ENABLED = false;
 const RELEASES_URL = 'https://github.com/Pal-AI-Lab/Coopanion/releases/latest';
 /** Releases come out at most a few times a day; a run left open for days still hears of them the same day. */
 const CHECK_EVERY_MS = 6 * 3600_000;
 
 /** Whether this build can install an update by itself. */
 function canUpdate() {
-  return app.isPackaged && (process.platform === 'win32' || (process.platform === 'linux' && !!process.env.APPIMAGE));
+  return AUTO_UPDATES_ENABLED && app.isPackaged && (process.platform === 'win32' || (process.platform === 'linux' && !!process.env.APPIMAGE));
 }
 
 /**

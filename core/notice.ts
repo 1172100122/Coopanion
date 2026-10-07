@@ -186,7 +186,7 @@ export function guideText(end: GuideEnd): string {
     : `[启动引导] ${name}在第 ${end.step} 步关掉了启动引导,后面的步骤没有走。`;
   return [
     head,
-    '下面是引导里的对话。引导按程序写好的台词走,「Coo:」那几行是程序替你说的:',
+    '下面是引导里的对话。引导按程序写好的台词走,带有桌宠名字的那几行是程序替你说的:',
     '<guide>', ...end.transcript, '</guide>',
     ...(end.finished ? GUIDE_AFTER(name) : []),
   ].join('\n');

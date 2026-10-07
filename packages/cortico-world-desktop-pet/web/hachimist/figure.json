@@ -1,0 +1,211 @@
+{
+  "manifest": 2,
+  "api": 2,
+  "id": "hachimist",
+  "version": "1.0.0",
+  "name": {
+    "zh": "Hachimist",
+    "en": "Hachimist"
+  },
+  "about": {
+    "zh": "金色披发、蓝眼睛、金色狼耳和蓬松尾巴的Q版少女,穿梅紫色植物纹样裙子和黑色系带靴",
+    "en": "a chibi companion with loose golden hair, blue eyes, golden wolf ears and a fluffy tail, wearing a plum botanical dress and black lace-up boots"
+  },
+  "credits": [
+    {
+      "role": "artwork",
+      "name": "User-selected, AI-generated Hachimist artwork"
+    }
+  ],
+  "entry": "figure.js",
+  "export": "createHachimistBody",
+  "thumb": "thumb.png",
+  "axes": [],
+  "presets": [
+    {
+      "id": "original",
+      "pick": {},
+      "name": {
+        "zh": "原始形象",
+        "en": "Original"
+      },
+      "thumb": "thumb.png",
+      "accent": "#A67BBD"
+    }
+  ],
+  "vocab": [
+    {
+      "id": "neutral",
+      "kind": "expression",
+      "names": {
+        "zh": [
+          "平静"
+        ]
+      },
+      "about": {
+        "zh": "默认的脸"
+      },
+      "seconds": 0.9
+    },
+    {
+      "id": "happy",
+      "kind": "expression",
+      "names": {
+        "zh": [
+          "开心",
+          "高兴"
+        ]
+      },
+      "about": {
+        "zh": "柔和地歪头回应",
+        "en": "a gentle head-tilt response"
+      },
+      "seconds": 0.9
+    },
+    {
+      "id": "sad",
+      "kind": "expression",
+      "names": {
+        "zh": [
+          "难过",
+          "伤心"
+        ]
+      },
+      "about": {
+        "zh": "低头垂眼,有点失落",
+        "en": "lower the head and eyes, looking disappointed"
+      },
+      "seconds": 0.9
+    },
+    {
+      "id": "thinking",
+      "kind": "expression",
+      "names": {
+        "zh": [
+          "思考",
+          "想想"
+        ]
+      },
+      "about": {
+        "zh": "专注工作时轻轻摆动、眨眼",
+        "en": "a focused working loop with subtle motion and blinking"
+      },
+      "seconds": 0.9
+    },
+    {
+      "id": "stand",
+      "kind": "motion",
+      "names": {
+        "zh": [
+          "站起",
+          "站"
+        ]
+      },
+      "about": {
+        "zh": "站起来(坐着、睡着时)"
+      },
+      "seconds": 1.2
+    },
+    {
+      "id": "jump",
+      "kind": "motion",
+      "names": {
+        "zh": [
+          "跳",
+          "跳起来"
+        ]
+      },
+      "about": {
+        "zh": "原地起跳"
+      },
+      "seconds": 1.2
+    },
+    {
+      "id": "hop",
+      "kind": "motion",
+      "names": {
+        "zh": [
+          "小跳",
+          "蹦"
+        ]
+      },
+      "about": {
+        "zh": "小小蹦一下"
+      },
+      "seconds": 0.9
+    },
+    {
+      "id": "look",
+      "kind": "motion",
+      "names": {
+        "zh": [
+          "张望",
+          "看看"
+        ]
+      },
+      "about": {
+        "zh": "左右张望"
+      },
+      "seconds": 2.7
+    },
+    {
+      "id": "turn",
+      "kind": "motion",
+      "names": {
+        "zh": [
+          "转身"
+        ]
+      },
+      "about": {
+        "zh": "转向另一边"
+      },
+      "seconds": 0.4
+    },
+    {
+      "id": "walk",
+      "kind": "motion",
+      "names": {
+        "zh": [
+          "走走",
+          "散步"
+        ]
+      },
+      "about": {
+        "zh": "随便走一段"
+      },
+      "seconds": 12
+    },
+    {
+      "id": "run",
+      "kind": "motion",
+      "names": {
+        "zh": [
+          "跑",
+          "跑起来"
+        ]
+      },
+      "about": {
+        "zh": "跑到屏幕另一头"
+      },
+      "seconds": 12
+    },
+    {
+      "id": "wave",
+      "kind": "motion",
+      "names": {
+        "zh": [
+          "招手",
+          "打招呼"
+        ]
+      },
+      "about": {
+        "zh": "笑着打招呼"
+      },
+      "seconds": 1.7
+    }
+  ],
+  "sounds": {},
+  "can": {
+    "walk": true
+  }
+}

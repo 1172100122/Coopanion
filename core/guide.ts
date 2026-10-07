@@ -21,6 +21,7 @@
  * again (the World's `pet.guide` panel method). Once it has run, a missing key is asked for in the
  * bubble from time to time (`askForKey`), with the key box right there.
  */
+import { DISPLAY_NAME } from './seed.ts';
 import { existsSync, writeFileSync } from 'node:fs';
 import type { DesktopPetWorld, PetDialog, PetDialogAnswer } from 'cortico-world-desktop-pet';
 import { VENDOR_ICONS, VENDORS, type Vendor } from 'cortico-provider-coo';
@@ -46,8 +47,8 @@ const MAC = process.platform === 'darwin';
 type Roam = 'off' | 'calm' | 'free';
 
 const S = {
-  hello: '你好呀!我是 Coo,以后就住在你屏幕的底边啦,库...',
-  helloReply: '你好,Coo!',
+  hello: `你好呀!我是 ${DISPLAY_NAME},以后就住在你屏幕的底边啦,库...`,
+  helloReply: `你好,${DISPLAY_NAME}!`,
   askName: '我该怎么称呼你?',
   nameSend: '就这么叫',
   gotName: (name: string) => `${name},记住啦!`,
@@ -140,7 +141,7 @@ class Closed extends Error {}
 
 /** One step for the record: Coo's line and, when the step asked something, the answer. */
 export function noteStep(d: PetDialog, a: PetDialogAnswer): string[] {
-  const lines = [`Coo:${d.text}`];
+  const lines = [`${DISPLAY_NAME}:${d.text}`];
   const input = d.input;
   if ('closed' in a) lines.push('(对方点了关闭,引导到这里结束)');
   else if ('index' in a && (input?.kind === 'buttons' || input?.kind === 'choices')) lines.push(`对方:${input.options[a.index]?.label ?? a.index}`);
@@ -262,7 +263,7 @@ export async function runGuide(deps: GuideDeps): Promise<void> {
     const setPet = (key: string, value: string) => call('/api/config', { group: PET_GROUP, values: { [key]: value } }).catch(() => {});
 
     // 1 hello, and a name
-    await step(1, { text: S.hello, marks: ['Coo'], actions: ['happy', 'hop'], input: { kind: 'buttons', options: [{ label: S.helloReply, primary: true }] } });
+    await step(1, { text: S.hello, marks: [DISPLAY_NAME], actions: ['happy', 'hop'], input: { kind: 'buttons', options: [{ label: S.helloReply, primary: true }] } });
     const saved = typeof values[USER_KEY] === 'string' ? values[USER_KEY] as string : '';
     const a = await step(1, {
       text: S.askName, actions: ['thinking'],
@@ -347,7 +348,7 @@ export async function runGuide(deps: GuideDeps): Promise<void> {
     deps.track?.('guide_closed', { step: reached });
     markDone(deps.doneFile);
     await t.show({ text: S.closed, actions: ['nod'] });
-    transcript.push(`Coo:${S.closed}`);
+    transcript.push(`${DISPLAY_NAME}:${S.closed}`);
     deps.onEnd?.({ finished: false, name, step: reached, transcript });
   } finally {
     running = false;

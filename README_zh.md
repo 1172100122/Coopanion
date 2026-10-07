@@ -1,3 +1,7 @@
+> **Hachimist 定制版：** 新安装默认使用金色披发的 Hachimist，原 Coo 和鲸鱼形象仍可切换。已有配置不会被覆盖。详见[形象说明、动画映射与本地预览](packages/cortico-world-desktop-pet/web/hachimist/README.md)。
+
+> 请从本定制版源码构建。下方上游下载按钮和一键安装命令会安装不含 Hachimist 的原版。本定制版已停用上游自动更新。
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">

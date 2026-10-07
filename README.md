@@ -1,3 +1,7 @@
+> **Hachimist fork:** New installations use the golden-haired Hachimist companion. Original Coo and whale figures remain selectable. [Appearance, animation mapping and local preview](packages/cortico-world-desktop-pet/web/hachimist/README.md).
+
+> Build this fork from source. The upstream download buttons and installer commands below install the original edition, without Hachimist. Automatic upstream updates are disabled in this fork.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">

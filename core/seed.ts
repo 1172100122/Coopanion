@@ -8,7 +8,7 @@ export const DEPLOYMENT = 'companion';
 export const ENDPOINT = 'deepseek';
 export const KEY_NAME = 'DEEPSEEK_API_KEY';
 export const CONSOLE_PORT = 17788;
-export const DISPLAY_NAME = 'Coo';
+export const DISPLAY_NAME = 'Hachimist';
 /** The provider module of the app's endpoints (cortico-provider-coo). */
 export const MODULE = 'coo';
 /** The module the endpoints of versions up to 0.1.2 name; it became `coo`. */
@@ -48,7 +48,7 @@ export function seed(home: string): void {
   });
   if (!existsSync(join(workspace, 'CONSTITUTION.md'))) copyFileSync(join(SEED_DIR, 'CONSTITUTION.md'), join(workspace, 'CONSTITUTION.md'));
   // the console shows it as the bot's avatar
-  if (!existsSync(join(deploy, 'avatar.png'))) copyFileSync(join(SEED_DIR, 'avatar.png'), join(deploy, 'avatar.png'));
+  if (!existsSync(join(deploy, 'avatar.png'))) copyFileSync(join(SEED_DIR, 'hachimist-avatar.png'), join(deploy, 'avatar.png'));
   upgradeSeededConstitution(workspace);
   moveEndpointsToCoo(join(home, 'providers'));
 }

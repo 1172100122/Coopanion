@@ -24,7 +24,9 @@ describe('pet_set', () => {
   });
 
   it('dresses Coo through its skin\'s own fields', () => {
-    const { changes, errors } = planSettings({ scheme: 'fox-cat-none-none-none' }, cfg(), packs);
+    const coo = cfg();
+    coo.skin.figure = 'coo';
+    const { changes, errors } = planSettings({ scheme: 'fox-cat-none-none-none' }, coo, packs);
     expect(errors).toEqual([]);
     expect(changes.map((c) => c.patch)).toEqual([{ skin: { palette: 'fox', head: 'cat', side: 'none', glasses: 'none', neck: 'none' } }]);
   });

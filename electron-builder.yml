@@ -13,12 +13,8 @@ npmRebuild: false
 nodeGypRebuild: false
 files:
   - "**/*"
-# where app/updater.cjs looks for releases; with --publish never this only writes latest.yml and
-# latest-linux.yml next to the installers (and app-update.yml into the app), which the release workflow uploads
-publish:
-  provider: github
-  owner: Pal-AI-Lab
-  repo: Coopanion
+# This fork has no update/release channel. Do not embed the upstream update feed.
+publish: null
 win:
   target:
     - target: nsis
@@ -52,8 +48,8 @@ mac:
   gatekeeperAssess: false
   extendInfo:
     LSUIElement: true
-    NSMicrophoneUsageDescription: Coo 用麦克风听你说话,语音在本机识别,录音不会上传。
-    NSAppleEventsUsageDescription: 操作电脑时,Coo 用它把你指定的应用切到前面。
+    NSMicrophoneUsageDescription: Hachimist 用麦克风听你说话,语音在本机识别,录音不会上传。
+    NSAppleEventsUsageDescription: 操作电脑时,Hachimist 用它把你指定的应用切到前面。
 dmg:
   writeUpdateInfo: false
 # x64 only. Data goes to ~/.config/Coopanion. The app runs on X11 (XWayland under Wayland, see app/main.cjs);
