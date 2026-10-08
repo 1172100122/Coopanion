@@ -119,6 +119,9 @@ export interface GuideDeps {
   doneFile: string;
   /** Shows the dressing page (in the settings window). */
   openDress: () => void;
+  /** Subscription sign-in and custom API connections live in the settings window. */
+  openConnections?: () => void;
+  connectionInSettings?: () => boolean;
   /** The introduction ended, walked through or closed. */
   onEnd?: (end: GuideEnd) => void;
   /** Usage statistics: each step reached, the source answer, and how the introduction ended. */
@@ -295,11 +298,20 @@ export async function runGuide(deps: GuideDeps): Promise<void> {
     await setPet(ROAM_KEY, roam);
     await step(2, { text: S.roamDone, actions: ['nod'] });
 
-    // 3 the model key
+    // 3 subscription sign-in or a provider API key
     const k = await currentConnection(call);
     if (k.ready) await step(3, { text: S.keyAlready(k.vendor?.name ?? '', k.model), actions: ['happy'] });
-    else if (!await connectLoop((d) => step(3, d), call, deps.pet, { text: S.askVendor, actions: ['thinking'], step: [3, STEPS] }, S.keyLater)) {
-      await step(3, { text: S.keySkipped, actions: ['sad'] });
+    else {
+      const choice = deps.openConnections ? await step(3, {
+        text: '可以登录 ChatGPT 订阅，或使用模型服务的 API Key。你想怎么连接？',
+        input: { kind: 'buttons', options: [{ label: '订阅登录或自定义接口', primary: true }, { label: '填写 API Key' }, { label: '稍后再连' }] },
+      }) : { index: 1 };
+      if ('index' in choice && choice.index === 0) {
+        deps.openConnections?.();
+        await step(3, { text: '在设置的「开始」页完成连接，再点「测试并启用」。登录会打开系统浏览器。', input: { kind: 'buttons', options: [{ label: S.gotIt }] } });
+      } else if ('index' in choice && choice.index === 1) {
+        if (!await connectLoop((d) => step(3, d), call, deps.pet, { text: S.askVendor, actions: ['thinking'], step: [3, STEPS] }, S.keyLater)) await step(3, { text: S.keySkipped, actions: ['sad'] });
+      }
     }
 
     // 4 voice input
@@ -373,7 +385,7 @@ const KEY_POLL_MS = 2000;
  * after each ask, or sooner once the person talks to Coo (what they said waits, undelivered, for
  * the key). The first ask comes `firstAfterMs` after the call.
  */
-export async function askForKey(deps: Pick<GuideDeps, 'pet' | 'console'>, keySet: () => boolean, talked: () => boolean, firstAfterMs: number): Promise<void> {
+export async function askForKey(deps: Pick<GuideDeps, 'pet' | 'console' | 'openConnections' | 'connectionInSettings'>, keySet: () => boolean, talked: () => boolean, firstAfterMs: number): Promise<void> {
   const t = talker(deps.pet);
   const call = api(deps.console);
   let lastAsk = Date.now() - ASK_AGAIN_MS + firstAfterMs;
@@ -382,8 +394,13 @@ export async function askForKey(deps: Pick<GuideDeps, 'pet' | 'console'>, keySet
     const since = Date.now() - lastAsk;
     const spoke = talked();
     if (t.connected() && !running && (since >= ASK_AGAIN_MS || (spoke && since >= ASK_TALKED_MS))) {
-      const text = !asked ? S.ask.first : spoke ? S.ask.talked : S.ask.again;
-      await connectLoop(t.show, call, deps.pet, { text, actions: ['thinking'], closable: true }, S.askLater).catch(() => false);
+      if (deps.connectionInSettings?.() && deps.openConnections) {
+        const answer = await t.show({ text: '模型连接还没就绪。可以在设置的「开始」页检查登录状态、选择模型并测试连接。', closable: true, input: { kind: 'buttons', options: [{ label: '打开连接设置', primary: true }, { label: S.askLater }] } });
+        if ('index' in answer && answer.index === 0) deps.openConnections();
+      } else {
+        const text = !asked ? S.ask.first : spoke ? S.ask.talked : S.ask.again;
+        await connectLoop(t.show, call, deps.pet, { text, actions: ['thinking'], closable: true }, S.askLater).catch(() => false);
+      }
       asked = true;
       lastAsk = Date.now();
       talked(); // what was said while the bubble was up got its answer there

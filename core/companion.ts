@@ -41,13 +41,12 @@ import type { WakeBus } from 'cortico/core/bus.ts';
 import { getByPath, type ConfigGroup } from 'cortico/core/config-schema.ts';
 import { GenerationError } from 'cortico/core/generation.ts';
 import { pick } from 'cortico/core/language.ts';
-import { secretReader } from 'cortico/core/secrets.ts';
 import type { Core } from 'cortico/core/core.ts';
 import type { CoreConfig, UsageRecord } from 'cortico/core/types.ts';
 import { loadDeployment } from 'cortico/deploy.ts';
 import { loadExtensions, readInstalled, type ExtensionSet } from 'cortico/extensions.ts';
 import { deploymentRoot, providersRoot, repoRoot } from 'cortico/paths.ts';
-import { providerModules, registerProviderModules } from 'cortico/providers/registry.ts';
+import { providerModule, providerModules, registerProviderModules } from 'cortico/providers/registry.ts';
 import { withWorlds, type WorldDefinition, type WorldSection } from 'cortico/world.ts';
 import { TERMINAL } from 'cortico/worlds/terminal/definition.ts';
 import { desktopPetDefinition, figurePacks, type DesktopPetWorld } from 'cortico-world-desktop-pet';
@@ -58,14 +57,15 @@ import { followPetLook } from './console-theme.ts';
 import { askForKey, guideDone, markDone, runGuide, type GuideDeps } from './guide.ts';
 import { noticeDefinition, type NoticeWorld } from './notice.ts';
 import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, SEED_DIR, seed } from './seed.ts';
+import { createConnections, credentialNamespace } from './providers/connections.ts';
+import { ChatGPTAuth } from './providers/chatgpt-auth.ts';
+import { ChildCredentialClient } from './providers/credential-client.ts';
+import { connectionReady } from './providers/readiness.ts';
 import { crashFields, describeEndpoint, publicExtensionName, Telemetry, type Counter } from './telemetry.ts';
 
-/** The active endpoint's key is set in the process environment or the endpoint's `.env`. */
+/** The active endpoint has its model and key or a usable subscription account. */
 function hasKey(config: CoreConfig): boolean {
-  const entry = config.providers[config.activeProvider];
-  if (!entry) return false;
-  if (!entry.secret) return true;
-  return secretReader(join(providersRoot(), config.activeProvider, '.env'))(entry.secret) !== '';
+  return connectionReady(config, providersRoot(), providerModule);
 }
 
 /** The program directory; crash reports name files relative to it. */
@@ -170,12 +170,12 @@ const REASON_MAX = 200;
 
 const FAILURE_HINT = {
   zh: {
-    text: (n: number, status: number, reason: string) => `我连着 ${n} 次没能从模型那里拿到回复。错误${status ? ` ${status}` : ''}:${reason}。请在设置的「开始」页检查模型名和 API Key,那里可以测试连接。`,
+    text: (n: number, status: number, reason: string) => `我连着 ${n} 次没能从模型那里拿到回复。错误${status ? ` ${status}` : ''}:${reason}。请在设置的「开始」页检查模型、登录状态或 API Key,那里可以测试连接。`,
     open: '打开设置',
     ok: '知道了',
   },
   en: {
-    text: (n: number, status: number, reason: string) => `My last ${n} requests to the model failed. Error${status ? ` ${status}` : ''}: ${reason}. Check the model name and API key on the Start page in settings, where you can test the connection.`,
+    text: (n: number, status: number, reason: string) => `My last ${n} requests to the model failed. Error${status ? ` ${status}` : ''}: ${reason}. Check the model, sign-in status or API key on the Start page in settings, where you can test the connection.`,
     open: 'Open settings',
     ok: 'OK',
   },
@@ -451,12 +451,19 @@ export async function main(): Promise<void> {
   };
   const bundled = [TERMINAL, DESKTOP_PET, CUA, NOTICE] as WorldDefinition<WorldSection>[];
 
+  const credentials = new ChildCredentialClient();
+  const connections = createConnections({ auth: name => new ChatGPTAuth({
+    store: credentials, storeKey: credentialNamespace(name), openExternal: url => credentials.openExternal(url),
+    onChange: state => {
+      if (config?.activeProvider === name && (!state.authenticated || !state.planUsageEnabled || state.pending)) bus?.setPaused(true);
+    },
+  }), onBlocked: name => { if (config?.activeProvider === name) bus?.setPaused(true); } });
   // extension providers must be registered before endpoints are resolved
   const extensions = await loadExtensions(repoRoot(), {
     reserved: bundled.map((w) => w.id),
-    reservedProviders: [...providerModules.map((m) => m.id), COO.id],
+    reservedProviders: [...providerModules.map((m) => m.id), COO.id, connections.module.id],
   });
-  registerProviderModules([COO, ...extensions.providers]);
+  registerProviderModules([COO, connections.module, ...extensions.providers]);
   extensions.consoleAssets.push(...bundledConsoleAssets([
     { id: DESKTOP_PET.id, packageName: 'cortico-world-desktop-pet' },
     { id: CUA.id, packageName: 'cortico-world-cua' },
@@ -465,6 +472,7 @@ export async function main(): Promise<void> {
 
   const loaded = loadDeployment(definition, deployDir, repoRoot(), join(repoRoot(), 'bots', 'cormini'), providersRoot());
   config = loaded.config;
+  await connections.initialize(loaded.config.providers);
   announceDataDir(loaded.dataDir);
   followPetLook(deployDir, getByPath(loaded.config as unknown as Record<string, unknown>, 'worlds.desktop-pet.skin') as { figure?: string; scheme?: string } | undefined,
     figurePacks([join(loaded.dataDir, 'figures')]).packs);
@@ -502,6 +510,8 @@ export async function main(): Promise<void> {
     console: `http://127.0.0.1:${port}`,
     doneFile: join(deployDir, GUIDE_FILE),
     openDress: () => process.send?.({ type: 'companion:open', path: '#/dress' }),
+    openConnections: () => process.send?.({ type: 'companion:open', path: '#/home' }),
+    connectionInSettings: () => loaded.config.providers[loaded.config.activeProvider]?.kind === connections.module.id,
     onEnd: (end) => (notice as NoticeWorld | null)?.guideEnded(end),
     track: (type, fields) => stats.event(type, fields),
   };
@@ -515,9 +525,10 @@ export async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     const done = await Promise.race([
-      Promise.all([bot.shutdown(reason), stats.stop()]).then(() => true),
+      Promise.all([bot.shutdown(reason), stats.stop(), connections.stop()]).then(() => true),
       new Promise<false>((r) => setTimeout(() => r(false), 30_000)),
     ]);
+    credentials.dispose();
     process.exit(done ? 0 : 1);
   };
   const update = sayUpdates(loaded.config, () => pet, () => guiding);

@@ -20,7 +20,7 @@
  * On macOS the app lives in the menu bar (the Info.plist sets LSUIElement): no Dock icon, except
  * while the settings window is open, so it can be reached with Command-Tab.
  */
-const { app, BrowserWindow, Menu, Notification, Tray, dialog, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, Menu, Notification, Tray, dialog, nativeImage, shell, safeStorage } = require('electron');
 const { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, rmSync, writeFileSync } = require('node:fs');
 const { delimiter, dirname, join } = require('node:path');
 
@@ -108,8 +108,11 @@ const { SettingsWindow } = require('./settings-window.cjs');
 const userData = app.getPath('userData');
 const shimDir = join(__dirname, 'shims');
 const petHost = app.isPackaged ? [process.execPath, '--pet-host'] : [process.execPath, APP_ROOT, '--pet-host'];
+const { createCredentialBroker } = require('./credentials.cjs');
+const credentials = createCredentialBroker({ safeStorage, directory: join(userData, 'credentials'), openExternal: url => shell.openExternal(url) });
 
 const core = new CoreHost({
+  credentialHandler: credentials.handle,
   appRoot: APP_ROOT,
   logDir: join(userData, 'logs'),
   env: {

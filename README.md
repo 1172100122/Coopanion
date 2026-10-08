@@ -43,6 +43,7 @@ Hachimist looks toward the pointer for four seconds after it enters her hit regi
 ## Features
 
 - **Many model services**: DeepSeek, Qwen, Kimi, Zhipu GLM, Doubao, Baidu Qianfan, MiniMax, StepFun and OpenRouter. Pick one and paste an API key.
+- **Subscription sign-in and API protocols**: ChatGPT plan sign-in, xAI API keys, and custom Responses, Chat Completions or Anthropic Messages. Subscription limits apply. Grok subscription login and OpenCode Go companion use remain unavailable. See [connection setup and verification limits](docs/PROVIDERS.md).
 - **Chat**: hold the talk key and speak, or type; Coo answers in a bubble. Speech is recognized on your machine with FunASR.
 - **Memory**: Coo remembers what you talked about, and knows when you poke it or pat its head.
 - **Computer use**: clicking buttons, typing, switching windows. Coo asks before it acts.
@@ -60,7 +61,7 @@ You need one of:
 - macOS 13 or later (Apple silicon or Intel)
 - A 64-bit Linux desktop (X11, or XWayland under Wayland)
 
-You also need an API key from one model service. [DeepSeek](https://platform.deepseek.com/) is the default; it bills by usage (see [Cost and privacy](#cost-and-privacy)). Installing does not need administrator rights.
+You also need an eligible ChatGPT subscription sign-in or an API key from a model service. [DeepSeek](https://platform.deepseek.com/) is the default API-key service; it bills by usage (see [Cost and privacy](#cost-and-privacy)). New subscription/API connections are configured on the Start page; see [provider setup](docs/PROVIDERS.md). Installing does not need administrator rights.
 
 ### Windows: installer
 
@@ -234,9 +235,9 @@ After installing, click **Restart process** and enable it in **World Overview**.
 
 ## Cost and privacy
 
-- **Cost**: Coopanion is free. The model service you choose bills you for usage; see the Usage & cost page (built-in prices exist for DeepSeek only).
+- **Cost**: Coopanion is free. API-key services bill separately; ChatGPT plan connections consume the signed-in plan's allowance. Subscription quotas are not a per-token price or unlimited usage. No automatic API-key fallback is enabled. The Usage & cost page has built-in API prices for DeepSeek only.
 - **Sent to the model service**: what you say and type, your interactions with Coo, and screenshots during computer use. Only the service you configured receives them.
-- **Kept on your machine**: API keys, memory, conversation history, settings and logs. Speech is recognized locally and only the text is sent.
+- **Kept on your machine**: API keys, protected subscription credentials, memory, conversation history, settings and logs. Subscription tokens are sent only to the official authorization/inference endpoints. Speech is recognized locally and only the text is sent.
 - **Anonymous usage statistics**: sent to `survey.palailab.org`. Only counts, time used, settings and a random install ID; no conversations, screenshots, keys or files. Every field is listed in [docs/TELEMETRY.md](docs/TELEMETRY.md). Turn it off in Habits.
 - **Other network access**: a check for new releases on GitHub when the settings window opens; npm when installing extensions; ModelScope (or Hugging Face as a fallback) when downloading the speech model.
 
@@ -250,7 +251,7 @@ After installing, click **Restart process** and enable it in **World Overview**.
 
 Uninstalling keeps the data, so memory and settings are still there after a reinstall. To remove everything, delete the data folder by hand (on Windows, the whole install folder).
 
-Inside the data folder, `home` holds memory, conversations, settings and API keys, `extensions` the extensions, `logs` the logs, and `home/models` the speech model.
+Inside the data folder, `home` holds memory, conversations, settings and API keys, `credentials` holds OS-encrypted subscription credentials, `extensions` the extensions, `logs` the logs, and `home/models` the speech model. Sign out before uninstalling if you also want to revoke subscription access.
 
 ## FAQ
 

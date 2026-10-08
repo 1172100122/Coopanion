@@ -61,3 +61,21 @@
 .companion-mode:hover { color: var(--ink); background: var(--sheet-2); border-style: solid; }
 /* 普通模式:底栏的设置与关机两个键通往高级页面,只留暂停/继续 */
 .companion-normal .rail-actions .rail-action:not(.rail-run) { display: none; }
+
+/* Account/compatible connections stay separate from the existing nine-vendor picker. */
+.home-connections-root { margin-bottom: 14px; }
+.home-connections .sheetbody { display: flex; flex-direction: column; gap: 12px; }
+.home-connection-services { display: flex; flex-wrap: wrap; gap: 8px; }
+.home-connection-services .on { outline: 2px solid var(--accent); outline-offset: 2px; }
+.home-connection-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.home-connection-field .field { width: 100%; }
+.home-connection-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr); gap: 12px; }
+.home-connection-account { overflow-wrap: anywhere; font-size: 13px; color: var(--muted-foreground); }
+.home-connection-images { font-size: 13px; line-height: 1.5; }
+.home-connection-go { display: flex; flex-direction: column; align-items: start; gap: 10px; }
+.home-connections [hidden] { display: none !important; }
+.home-connections .msgline { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .home-connection-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.home-connection-accountpicker { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
+.home-connection-accountpicker > label { flex: 1; min-width: 160px; }

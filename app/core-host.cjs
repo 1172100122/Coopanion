@@ -19,7 +19,7 @@ const MAX_CRASHES = 5;
 const LOG_ROTATE_BYTES = 5 * 1024 * 1024;
 
 class CoreHost extends EventEmitter {
-  /** @param {{ appRoot: string, env: NodeJS.ProcessEnv, logDir: string }} opts */
+  /** @param {{ appRoot: string, env: NodeJS.ProcessEnv, logDir: string, credentialHandler?: (message: object) => Promise<object | null> }} opts */
   constructor(opts) {
     super();
     this.opts = opts;
@@ -56,7 +56,28 @@ class CoreHost extends EventEmitter {
     this.restartAsked = false;
     this.emit('state', this.state);
     child.on('message', (msg) => {
-      if (msg?.type === 'companion:ready') {
+      if (this.child !== child) return;
+      if (msg?.type === 'companion:credentials') {
+        // Replies go only to the exact child that requested them, never a renderer or successor.
+        const handler = this.opts.credentialHandler;
+        Promise.resolve().then(() => {
+          if (this.child !== child) return null;
+          if (this.stopping && msg.op === 'open-external') return {
+            type: 'companion:credentials-result', id: msg.id, ok: false, value: null, error: 'unavailable',
+          };
+          return handler ? handler(msg) : {
+          type: 'companion:credentials-result', id: msg.id, ok: false, value: null, error: 'unavailable',
+          };
+        }).then((result) => {
+          if (!result || this.child !== child || !child.connected) return;
+          try { child.send(result, () => {}); } catch { /* private channel closed */ }
+        }).catch(() => {
+          if (this.child !== child || !child.connected) return;
+          try { child.send({ type: 'companion:credentials-result', id: msg.id, ok: false, value: null, error: 'storage' }, () => {}); } catch { /* channel closed */ }
+        });
+      } else if (this.stopping) {
+        return;
+      } else if (msg?.type === 'companion:ready') {
         this.port = msg.port;
         this.dataDir = msg.dataDir;
         this.keyMissing = !!msg.keyMissing;
@@ -113,7 +134,8 @@ class CoreHost extends EventEmitter {
   }
 
   /** Asks for a clean shutdown; kills the child if it has not exited within `graceMs`. */
-  async stop(graceMs = 12_000) {
+  // Core allows 30 seconds for bot shutdown and secure credential commits; leave 5 seconds of margin.
+  async stop(graceMs = 35_000) {
     this.stopping = true;
     const child = this.child;
     if (!child) return;

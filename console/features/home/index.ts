@@ -11,12 +11,13 @@
  * control calls an endpoint the rest of the console already uses. Styles are in home.css, which
  * scripts/stage.ts adds to the console stylesheet.
  */
-import { post } from '../../core/api.ts';
-import { pick } from '../../core/language.ts';
+import { get, post } from '../../core/api.ts';
+import { LANGUAGE, pick } from '../../core/language.ts';
 import type { FeatureContext, FrameworkFeature } from '../feature.ts';
 import { readMode, requestMode } from '../mode.ts';
 import { connectVendor, consoleCall, readStatus, testEndpoint, VENDOR_ICONS, VENDORS, vendorOf, type ConnectResult, type Status, type Vendor } from './model.ts';
 import { createPetPreview } from './preview.ts';
+import { mountConnections } from './connections.ts';
 
 const PET_PAGE = 'world:desktop-pet';
 
@@ -107,6 +108,10 @@ async function mount(ctx: FeatureContext): Promise<void> {
   guide.title = S.guideHint;
   head.append(title, state, ui.h('span', 'grow'), guide);
   root.append(head);
+
+  /* Subscription and compatible connections have their own, explicit activation flow. */
+  const connectionsRoot = ui.h('div', 'home-connections-root');
+  root.append(connectionsRoot);
 
   /* ---------- model ---------- */
   const model = ui.sheet({ title: S.modelTitle });
@@ -216,8 +221,11 @@ async function mount(ctx: FeatureContext): Promise<void> {
     if (!vendorShown && current) { vendorShown = true; pickVendor(current); }
   };
 
+  let modelRefresh = 0;
   const refreshModel = async () => {
-    renderStatus(await readStatus(signal));
+    const version = ++modelRefresh;
+    const next = await readStatus(signal);
+    if (!signal.aborted && version === modelRefresh) renderStatus(next);
   };
 
   const showTest = (r: ConnectResult) => {
@@ -259,28 +267,52 @@ async function mount(ctx: FeatureContext): Promise<void> {
 
   /* pet */
   let petState: PetState | null = null;
+  let petRefresh = 0;
   const refreshPet = async () => {
+    const version = ++petRefresh;
+    let next: PetState | null = null;
     try {
-      petState = await post<PetState>(panelPath(PET_PAGE, 'pet', 'state'), { args: [] }, opts);
-    } catch { petState = null; }
+      next = await post<PetState>(panelPath(PET_PAGE, 'pet', 'state'), { args: [] }, opts);
+    } catch { /* Keep failures local to the pet status. */ }
+    if (signal.aborted || version !== petRefresh) return;
+    petState = next;
     petPill.textContent = petState?.connected ? S.petShown : S.petHidden;
     petPill.className = `pill ${petState?.connected ? 'on' : 'plain'}`;
   };
   showPet.addEventListener('click', async () => {
     await post(panelPath(PET_PAGE, 'pet', 'closeWindow'), { args: [] }, opts).catch(() => null);
     await post(panelPath(PET_PAGE, 'pet', 'openWindow'), { args: [] }, opts).catch(() => null);
-    setTimeout(() => void refreshPet(), 1500);
+    ctx.lifecycle.timeout(() => { if (!root.ownerDocument.hidden) void refreshPet(); }, 1500);
   });
   dress.addEventListener('click', () => ctx.router.navigate(['dress']));
 
-  await Promise.all([refreshModel(), refreshPet()]);
-  const refreshVisible = () => {
-    if (root.ownerDocument.hidden || signal.aborted) return;
-    void refreshModel();
-    void refreshPet();
+  ctx.lifecycle.own(mountConnections({
+    root: connectionsRoot, signal, language: LANGUAGE,
+    call: (path, body, options) => body === undefined ? get(path, options) : post(path, body, options),
+    onActivated: refreshModel,
+  }));
+
+  // A hidden page has no polling timer; slow reads never overlap the next tick.
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let refreshing = false;
+  const refreshVisible = async () => {
+    clearTimeout(refreshTimer); refreshTimer = undefined;
+    if (root.ownerDocument.hidden || signal.aborted || refreshing) return;
+    refreshing = true;
+    try { await Promise.all([refreshModel(), refreshPet()]); }
+    catch (err) { if (!signal.aborted) ctx.onError(err); }
+    finally {
+      refreshing = false;
+      if (!signal.aborted && !root.ownerDocument.hidden) refreshTimer = setTimeout(() => void refreshVisible(), 2000);
+    }
   };
-  ctx.lifecycle.interval(refreshVisible, 2000);
-  root.ownerDocument.addEventListener('visibilitychange', refreshVisible, opts);
+  const visibilityChanged = () => {
+    clearTimeout(refreshTimer); refreshTimer = undefined;
+    if (!root.ownerDocument.hidden) void refreshVisible();
+  };
+  ctx.lifecycle.add(() => clearTimeout(refreshTimer));
+  root.ownerDocument.addEventListener('visibilitychange', visibilityChanged, opts);
+  await refreshVisible();
 }
 
 export const homeFeature: FrameworkFeature = {

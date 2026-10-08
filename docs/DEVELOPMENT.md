@@ -4,6 +4,8 @@ Coopanion 是用 [Cortico](https://github.com/Pal-AI-Lab/Cortico) 组装的 Elec
 [桌宠 World](../packages/cortico-world-desktop-pet) + [电脑操作 World](../packages/cortico-world-cua),
 模型经 Coo Pet Provider(`packages/cortico-provider-coo`)接 DeepSeek、通义千问、Kimi 等几家服务,默认 DeepSeek。每家一个端点,名字就是它在 `src/vendors.ts` 里的 id;0.1.x 的 `deepseek` 模块端点在启动时由 `core/seed.ts` 改成 `coo`。
 
+`core/providers/` 另提供 `connections` 模块：ChatGPT 订阅鉴权、xAI API Key 与三种独立传输协议。账号存储经私有 IPC 到 `app/credentials.cjs`，OAuth token 不进入 provider 配置或浏览器。界面在 `console/features/home/connections.ts`；使用限制、原生验收与来源见 [PROVIDERS.md](PROVIDERS.md)。本模块随 `core/` 打包，无需修改 Cortico 子模块或加入新的运行时依赖。
+
 ## 从源码构建
 
 需要 Git、Node.js 22 和 pnpm(`corepack enable`),在 Windows 或 macOS 上都能开发。

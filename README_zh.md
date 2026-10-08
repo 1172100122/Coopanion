@@ -41,6 +41,7 @@ Hachimist 已补充坐下、睡觉和文字说话口型素材；鼠标进入角�
 ## 功能
 
 - **多家模型**：DeepSeek、通义千问、Kimi、智谱 GLM、豆包、百度千帆、MiniMax、阶跃星辰、OpenRouter。选一家，贴上 API Key 就能用。
+- **订阅与兼容接口**：新增 ChatGPT 订阅登录、xAI API Key，以及 Responses、Chat Completions、Anthropic Messages 三种协议的自定义接口。受服务方额度限制；Grok 订阅登录和 OpenCode Go 常驻陪伴仍不可用。见[接入方式与验证限制](docs/PROVIDERS.md)。
 - **聊天**：按说话键说话，或者打字，Coo 在气泡里回复。语音在本机用 FunASR 识别。
 - **记忆**：记得聊过的内容，也知道你戳了它、摸了它的头。
 - **操作电脑**：点按钮、打字、切窗口。动手前先问你。
@@ -58,7 +59,7 @@ Hachimist 已补充坐下、睡觉和文字说话口型素材；鼠标进入角�
 - macOS 13 及以上（Apple 芯片和 Intel 都可以）
 - 64 位 Linux 桌面（X11，或 Wayland 下的 XWayland）
 
-另外需要一家模型服务的 API Key，默认推荐 [DeepSeek](https://platform.deepseek.com/)，按用量付费，见[费用与隐私](#费用与隐私)。安装不需要管理员权限。
+另外需要符合条件的 ChatGPT 订阅登录，或一家模型服务的 API Key。API Key 默认推荐 [DeepSeek](https://platform.deepseek.com/)，按用量付费，见[费用与隐私](#费用与隐私)。新的订阅/API 接口在「开始」页配置，详见[接入说明](docs/PROVIDERS.md)。安装不需要管理员权限。
 
 ### Windows：下载安装包
 
@@ -232,9 +233,9 @@ irm https://raw.githubusercontent.com/Pal-AI-Lab/Coopanion/main/installer/instal
 
 ## 费用与隐私
 
-- **费用**：Coopanion 免费。聊天的费用由你选的模型服务按用量收取，可在「用量与成本」页查看（内置价目的只有 DeepSeek）。
+- **费用**：Coopanion 免费。API Key 服务独立计费；ChatGPT 订阅连接消耗所登录账号的订阅额度，不能当作无限用量或按 token 单价计算。不会自动切换为付费 API Key。「用量与成本」页内置的 API 价目只有 DeepSeek。
 - **发给模型服务的内容**：你说的话、打的字、和 Coo 的互动，以及操作电脑时的截图。只发给你配置的那一家。
-- **留在本机的内容**：API Key、记忆、对话记录、设置、日志。语音在本机识别，只把识别出的文字发出去。
+- **留在本机的内容**：API Key、受系统加密保护的订阅凭据、记忆、对话记录、设置、日志。订阅 token 只发往官方授权和推理接口。语音在本机识别，只把识别出的文字发出去。
 - **匿名使用统计**：发到 `survey.palailab.org`，只有使用次数、时长、设置和随机生成的安装编号，不含对话、截图、Key 和文件。字段见 [docs/TELEMETRY.md](docs/TELEMETRY.md)，可在「习惯」页关闭。
 - **其他联网**：打开设置窗口时向 GitHub 查询新版本；安装扩展时访问 npm；下载语音模型时访问 ModelScope（失败时用 Hugging Face）。
 
@@ -248,7 +249,7 @@ irm https://raw.githubusercontent.com/Pal-AI-Lab/Coopanion/main/installer/instal
 
 卸载不会删除数据，重装后记忆和设置还在。不再需要时，手动删掉数据目录（Windows 上删整个安装目录）。
 
-数据目录里，`home` 是记忆、对话记录、设置和 API Key，`extensions` 是扩展，`logs` 是日志，`home/models` 是语音模型。
+数据目录里，`home` 是记忆、对话记录、设置和 API Key，`credentials` 是系统加密的订阅凭据，`extensions` 是扩展，`logs` 是日志，`home/models` 是语音模型。如需撤销订阅访问，请先退出订阅账号再卸载。
 
 ## 常见问题
 
