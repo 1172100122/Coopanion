@@ -5,13 +5,13 @@ import { JSDOM } from 'jsdom';
 import { createPreviewServer } from '../packages/cortico-world-desktop-pet/examples/hachimist/serve.mjs';
 import { describe, expect, it } from 'vitest';
 import * as kit from '../packages/cortico-world-desktop-pet/web/kit/body.js';
-import { ATLAS, STATES, createHachimistBody, createHachimistFigure, lookCell, spriteCell, spriteState } from '../packages/cortico-world-desktop-pet/web/hachimist/figure.js';
+import { ATLAS, STATES, ACTIONS, createHachimistBody, createHachimistFigure, lookCell, spriteCell, spriteState } from '../packages/cortico-world-desktop-pet/web/hachimist/figure.js';
 import { DESKTOP_PET_DEFAULTS } from '../packages/cortico-world-desktop-pet/src/config.ts';
 import { normalizeSkin } from '../packages/cortico-world-desktop-pet/web/coo/coo.js';
 import { figurePacks, packFor, readManifest } from '../packages/cortico-world-desktop-pet/src/packs.ts';
 
 const dir = new URL('../packages/cortico-world-desktop-pet/web/hachimist/', import.meta.url);
-const opts = () => ({ loadImage: async () => ({ naturalWidth: ATLAS.width, naturalHeight: ATLAS.height }), asset: (p) => new URL(p, dir) });
+const opts = () => ({ loadImage: async (url) => String(url).includes('/actions/') ? ({ naturalWidth: 1152, naturalHeight: 208 }) : ({ naturalWidth: ATLAS.width, naturalHeight: ATLAS.height }), asset: (p) => new URL(p, dir) });
 const frame = (changes = {}) => ({ mode: 'idle', face: 'neutral', modeT: 0, t: 0, facing: 1, look: [0, 0], ...changes });
 
 describe('Hachimist figure', () => {
@@ -19,6 +19,18 @@ describe('Hachimist figure', () => {
     expect(createHash('sha256').update(readFileSync(new URL('spritesheet.png', dir))).digest('hex')).toBe('b5f9ac315bcb201a23e38e8235f30af0f1a9c7b7504ebacd07822a9b62c49536');
     expect(Object.values(STATES).reduce((sum, row) => sum + row.frames, 16)).toBe(73);
     expect(Object.keys(STATES)).toHaveLength(9);
+  });
+  it('ships all supplementary strips with matching dimensions, timing and provenance hashes', () => {
+    const metadata = JSON.parse(readFileSync(new URL('actions/actions.json', dir), 'utf8'));
+    const provenance = JSON.parse(readFileSync(new URL('actions/artwork-provenance.json', dir), 'utf8'));
+    for (const [state, strip] of Object.entries(ACTIONS)) {
+      const png = readFileSync(new URL(strip.file, dir));
+      expect(png.subarray(1, 4).toString()).toBe('PNG');
+      expect(png.readUInt32BE(16)).toBe(1152); expect(png.readUInt32BE(20)).toBe(208);
+      expect(png[25]).toBe(6); // RGBA, including real transparent padding
+      expect(metadata[state]).toMatchObject({ frames: strip.frames, fps: strip.fps, cellWidth: 192, cellHeight: 208 });
+      expect(createHash('sha256').update(png).digest('hex')).toBe(provenance.states[state].sha256);
+    }
   });
   it('defaults new installs to Hachimist while preserving saved figures and Coo fallback', () => {
     const { packs, problems } = figurePacks([]);
@@ -46,7 +58,10 @@ describe('Hachimist figure', () => {
     expect(spriteState(frame({ face: 'thinking' }))).toBe('running');
     expect(spriteState(frame({ face: 'sad' }))).toBe('failed');
     expect(spriteState(frame({ face: 'happy' }))).toBe('review');
-    expect(spriteCell('sleep', frame(), 10)).toEqual({ row: 0, column: 2 });
+    expect(spriteCell('sleep', frame(), 10)).toEqual({ row: 0, column: 0 });
+    expect(spriteState(frame({ mode: 'sit' }))).toBe('sit');
+    expect(spriteState(frame({ talk: .5 }))).toBe('talk');
+    expect(spriteState(frame({ talk: .01 }))).toBe('idle');
     expect(spriteState(frame({ face: 'unknown' }))).toBe('idle');
   });
   it('renders one reusable cropped viewport, advances frames, corrects left mirroring and disposes', async () => {
@@ -68,6 +83,28 @@ describe('Hachimist figure', () => {
   });
   it('rejects a wrong-sized atlas so the host can fall back safely', async () => {
     await expect(createHachimistFigure(dir, { ...opts(), loadImage: async () => ({ naturalWidth: 1, naturalHeight: 1 }) })).rejects.toThrow('1536');
+  });
+  it('switches between supplementary sheets and the original atlas without stale crops', async () => {
+    const dom = new JSDOM('<svg><g/></svg>');
+    const group = dom.window.document.querySelector('g');
+    const figure = await createHachimistFigure(dir, opts());
+    for (const [state, changes] of [['sit', { mode: 'sit' }], ['sleep', { mode: 'sleep' }], ['talk', { talk: 1 }]]) {
+      figure.draw(group, {}, frame({ t: 10, ...changes }));
+      figure.draw(group, {}, frame({ t: 10.5, ...changes }));
+      expect(group.firstChild.dataset.state).toBe(state);
+      expect(group.querySelector('image').getAttribute('href')).toContain(ACTIONS[state].file);
+      expect(group.querySelector('image').getAttribute('width')).toBe('1152');
+      expect(group.firstChild.getAttribute('viewBox')).toBe(`${Math.floor(.5 * ACTIONS[state].fps) * 192} 0 192 208`);
+      figure.draw(group, {}, frame({ mode: 'walk', facing: -1, t: 11 }));
+      expect(group.querySelector('image').getAttribute('href')).toContain('spritesheet.png');
+      expect(group.querySelector('image').getAttribute('height')).toBe('2288');
+      expect(group.firstChild.getAttribute('viewBox')).toBe('0 416 192 208');
+    }
+    figure.dispose();
+  });
+  it('requires valid supplementary strips instead of silently advertising missing poses', async () => {
+    await expect(createHachimistFigure(dir, { ...opts(), loadImage: async (url) => String(url).includes('/actions/')
+      ? ({ naturalWidth: 192, naturalHeight: 208 }) : ({ naturalWidth: ATLAS.width, naturalHeight: ATLAS.height }) })).rejects.toThrow('sit strip');
   });
   it('runs every advertised action through the real kit and keeps walking, interrupted motion and repeated disposal working', async () => {
     const dom = new JSDOM('<div id="root"></div>');

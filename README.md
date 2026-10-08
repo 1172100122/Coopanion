@@ -38,6 +38,8 @@ The app is in Chinese and English. The first-run guide is currently Chinese only
 
 ![1790222143546](image/README/1790222143546.png)
 
+Hachimist includes pointer-compatible blinking, interruptible full-body waving, and separate sitting, sleeping and text-driven talking animations. Talking is not audio/phoneme lip-sync. See the [figure notes](packages/cortico-world-desktop-pet/web/hachimist/README.md) for timing and limitations.
+
 ## Features
 
 - **Many model services**: DeepSeek, Qwen, Kimi, Zhipu GLM, Doubao, Baidu Qianfan, MiniMax, StepFun and OpenRouter. Pick one and paste an API key.

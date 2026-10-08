@@ -12,14 +12,19 @@ The renderer crops the original atlas in SVG. It does not repaint the character,
 
 ## Animation mapping and limits
 
-- Idle → idle loop; pointer tracking / look → all 16 directional frames, clockwise from up
+- Idle → original idle loop; pointer tracking / look → all 16 directional frames, clockwise from up
+- Natural blinking uses the kit's blink clock even while the pointer keeps a directional gaze active
 - Walk / run → right- or left-running loop; the left row cancels the kit's horizontal flip because its source already faces left
-- Wave → waving; jump / hop → takeoff, airborne and landing frames
+- Wave stops walking/running before its full-body animation starts. If requested during carrying or a jump, one pending wave waits until the body settles. Repeated pending waves coalesce; a newer command, listening/thinking cue, direct touch or figure replacement cancels stale gestures. Other figures retain their existing layered gestures.
+- Jump / hop → original takeoff, airborne and landing frames
 - Sad, drag, dizzy → failed; listening → waiting; thinking → running/task loop; happy → gentle review/head-tilt loop
-- Autonomous sleep → the closed-eye idle frame with the kit's sleep particles; sitting → standing artwork while the kit retains its sitting state
-- Other unsupported expressions → idle or directional gaze. The atlas has no separate angry, crying, kiss, seated or lip-sync artwork. Those expressions are not advertised in this pack's vocabulary.
+- Sit and sleep → dedicated six-frame strips; sleep retains the kit's sleep particles
+- Talking while standing → dedicated six-frame mouth-motion strip driven by the host's text/talk pulses; it stops when pulses decay. This is character animation, not audio/phoneme lip-sync, and adds no TTS or microphone access. Physical movement, rest and explicit gestures retain priority.
+- Unsupported expressions keep their existing fallback. Separate angry, crying and kiss art is not advertised.
 
-Frame timing is defined in `STATES` in `figure.js` (5–12 fps). Coopanion's physical simulation still runs at the host frame rate. Only the twelve expressions/motions listed in `figure.json` are advertised to the model. Internal kit actions, including automatic resting and host cues, retain safe fallbacks.
+The original atlas remains unchanged. `actions/sit.png`, `actions/sleep.png` and `actions/talk.png` are independent Coopanion-only transparent 1152 × 208 strips (six 192 × 208 cells each), with a common bottom anchor matching the original atlas. `actions/actions.json` records geometry and timing; `actions/artwork-provenance.json` records SHA-256 hashes and validation. These strips do not change the dot v2 pet schema or any saved pet/avatar.
+
+Frame timing is defined in `STATES` and `ACTIONS` in `figure.js` (sit 5 fps, sleep 3 fps, talk 8 fps). The kit simulation still runs at the host frame rate. Four expressions and ten motions are advertised in `figure.json`. The [preview](../../examples/hachimist/) exposes sit, sleep and talk controls without an API key.
 
 ## Defaults and existing installations
 

@@ -1,0 +1,154 @@
+{
+  "ok": true,
+  "format": "Coopanion supplementary horizontal strips; existing atlas unchanged",
+  "states": {
+    "sit": {
+      "frames": 6,
+      "fps": 5,
+      "sha256": "e7945112c507172dac94c23601aa8afc9e4f0854bf9f6e415e3a842d889f4f5d",
+      "source_sha256": "bef08145a3fff0800c39c58638074d8745a4cdbd4d0788a8f521a77d756fa957",
+      "bboxes": [
+        [
+          49,
+          87,
+          143,
+          203
+        ],
+        [
+          49,
+          87,
+          143,
+          203
+        ],
+        [
+          50,
+          87,
+          143,
+          203
+        ],
+        [
+          49,
+          87,
+          143,
+          203
+        ],
+        [
+          49,
+          87,
+          143,
+          203
+        ],
+        [
+          50,
+          87,
+          143,
+          203
+        ]
+      ],
+      "structural_ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    "sleep": {
+      "frames": 6,
+      "fps": 3,
+      "sha256": "4c7ada3a6e00e7658d9c7c7c2cbf93868c947b8a254eafcd613654e9055d84dd",
+      "source_sha256": "7965b667897f04196fb3f6cd1f1547e008fa39e3ba0aaa7547e92158feb5fc61",
+      "bboxes": [
+        [
+          46,
+          94,
+          146,
+          203
+        ],
+        [
+          47,
+          93,
+          146,
+          203
+        ],
+        [
+          45,
+          92,
+          147,
+          203
+        ],
+        [
+          45,
+          93,
+          147,
+          203
+        ],
+        [
+          45,
+          93,
+          147,
+          203
+        ],
+        [
+          47,
+          93,
+          145,
+          203
+        ]
+      ],
+      "structural_ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    "talk": {
+      "frames": 6,
+      "fps": 8,
+      "sha256": "b20016feb25960021bd1135b6cd64f9f14345c8c20e7e49804e0ee2d75a55874",
+      "source_sha256": "2b623d8ac363de7907f0561e8db6fd8a92b001f87f5665113360c3b75fc25ff7",
+      "bboxes": [
+        [
+          44,
+          60,
+          147,
+          203
+        ],
+        [
+          44,
+          61,
+          147,
+          203
+        ],
+        [
+          45,
+          60,
+          147,
+          203
+        ],
+        [
+          44,
+          60,
+          146,
+          203
+        ],
+        [
+          44,
+          60,
+          147,
+          203
+        ],
+        [
+          44,
+          60,
+          147,
+          203
+        ]
+      ],
+      "structural_ok": true,
+      "errors": [],
+      "warnings": []
+    }
+  },
+  "qa": {
+    "native_size": "192x208",
+    "registration": "One uniform transform per strip, all final baselines y=203",
+    "motion": "Sit blink, sleep breathing, talk mouth closed/small/wide/small/closed/closed",
+    "talk": "Generic speaking loop, no audio and no phoneme synchronization",
+    "transitions": "No extra settle/wake drawings included"
+  }
+}

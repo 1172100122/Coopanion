@@ -2,7 +2,7 @@
   "manifest": 2,
   "api": 2,
   "id": "hachimist",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": {
     "zh": "Hachimist",
     "en": "Hachimist"
@@ -202,6 +202,36 @@
         "zh": "笑着打招呼"
       },
       "seconds": 1.7
+    },
+    {
+      "id": "sit",
+      "kind": "motion",
+      "names": {
+        "zh": [
+          "坐下",
+          "坐"
+        ]
+      },
+      "about": {
+        "zh": "坐下休息",
+        "en": "sit down and rest"
+      },
+      "seconds": 1.2
+    },
+    {
+      "id": "sleep",
+      "kind": "motion",
+      "names": {
+        "zh": [
+          "睡觉",
+          "睡"
+        ]
+      },
+      "about": {
+        "zh": "闭上眼睛睡觉",
+        "en": "close her eyes and sleep"
+      },
+      "seconds": 1.2
     }
   ],
   "sounds": {},

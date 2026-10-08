@@ -1,0 +1,23 @@
+{
+  "sit": {
+    "file": "sit.png",
+    "frames": 6,
+    "fps": 5,
+    "cellWidth": 192,
+    "cellHeight": 208
+  },
+  "sleep": {
+    "file": "sleep.png",
+    "frames": 6,
+    "fps": 3,
+    "cellWidth": 192,
+    "cellHeight": 208
+  },
+  "talk": {
+    "file": "talk.png",
+    "frames": 6,
+    "fps": 8,
+    "cellWidth": 192,
+    "cellHeight": 208
+  }
+}

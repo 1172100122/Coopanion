@@ -36,6 +36,8 @@ Coopanion 是一个桌宠。桌宠 **Coo** 待在屏幕底边，可以用气泡�
 
 ![1790222143546](image/README/1790222143546.png)
 
+Hachimist 已补充坐下、睡觉和文字说话口型素材；持续看向鼠标时也会眨眼，招手会先停下走动，落地后再处理等待中的招手。口型由文字/说话事件驱动，不是音频音素同步。时序与限制见[形象说明](packages/cortico-world-desktop-pet/web/hachimist/README.md)。
+
 ## 功能
 
 - **多家模型**：DeepSeek、通义千问、Kimi、智谱 GLM、豆包、百度千帆、MiniMax、阶跃星辰、OpenRouter。选一家，贴上 API Key 就能用。

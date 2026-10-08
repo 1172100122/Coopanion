@@ -23,7 +23,9 @@ const controls = [
   ['Walk left', () => body.walk(130, false, 1)], ['Run right', () => body.walk(stage.clientWidth - 130, true, 2)],
   ['Thinking', () => body.set({ listening: false, thinking: true })], ['Listening', () => body.set({ thinking: false, listening: true })],
   ['Review', () => { body.set({ listening: false, thinking: false }); body.do('happy'); }], ['Sad', () => { body.set({ listening: false, thinking: false }); body.do('sad'); }],
-  ['Sleep fallback', () => { body.set({ listening: false, thinking: false }); body.do('sleep'); }],
+  ['Sit', () => { body.set({ listening: false, thinking: false }); body.do('sit'); }],
+  ['Talk', () => { body.set({ listening: false, thinking: false }); body.do('stand'); const target = body; let n = 0; const id = setInterval(() => { if (destroyed || target !== body || ++n > 24) clearInterval(id); else target.talk(); }, 90); }],
+  ['Sleep', () => { body.set({ listening: false, thinking: false }); body.do('sleep'); }],
   ['Light / dark', () => { theme = theme === 'dark' ? 'light' : 'dark'; document.body.classList.toggle('light', theme === 'light'); body.set({ theme }); }],
   ['Reload figure', () => mount()],
 ];

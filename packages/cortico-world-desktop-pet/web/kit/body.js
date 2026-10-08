@@ -119,6 +119,8 @@ const HITS = [[128, 128, 108]];
  * `figure.colors.z`, if present, colours the sleep z's (otherwise they take the `eye` class).
  * `figure.gestures`, if present, names the short gestures (nod, shake) the figure draws itself: the body then
  * leaves them out, and the frame's `gesture` ({ kind, k: 0..1 }, or null) says which one is playing and how far.
+ * `figure.stationaryGestures`, if present, names gestures that need the full body: they stop locomotion,
+ * wait for landing when requested in the air, and are canceled by a newer command or direct interaction.
  * `figure.anchors`, `figure.extent` ([x0, y0, x1, y1]) and `figure.hits` ([[x, y, r]]) are in logo units; each
  * is read every frame, so a getter may follow the skin. `figure.setSkin(skin)` hears each skin change.
  */
@@ -147,6 +149,12 @@ export function createPet(els, opts) {
   };
   const pointer = { x: -1e4, y: -1e4, inside: false, vx: 0, samples: [] };
   let press = null, strokeAcc = 0, petCool = 0;
+  let pendingGesture = null; // latest-only: never replay stale gestures after a newer order
+  const stationaryGesture = kind => custom?.stationaryGestures?.includes(kind);
+  function cancelGesture() {
+    pendingGesture = null;
+    if (stationaryGesture(pet.pulse?.kind)) { pet.pulse = null; pet.expr = null; }
+  }
   const P = [];
   const anchors = () => ({ ...ANCHORS, ...custom?.anchors });
   let A = anchors();
@@ -203,6 +211,14 @@ export function createPet(els, opts) {
 
   /** Runs a motion. Returns false when the body cannot take it now (in the air, being dragged). */
   function act(a) {
+    if (!stationaryGesture(a)) cancelGesture();
+    if (stationaryGesture(a)) {
+      if (busy() || ['land', 'wake', 'dizzy'].includes(pet.mode) || press) { pendingGesture = a; return true; }
+      pendingGesture = null;
+      // A whole-body strip cannot wave while its legs are walking. Report interrupted walks normally.
+      setMode('idle', { speed: 0 });
+      hold = Math.max(hold, T + 1.8);
+    }
     if (busy()) return false;
     pet.expr = null; pet.lastAct = a;
     const seated = pet.mode === 'sleep' || pet.mode === 'sit';
@@ -242,6 +258,7 @@ export function createPet(els, opts) {
   function holdFace(n, seconds) { pet.expr = n; pet.exprUntil = T + seconds; pet.nextAt = Math.max(pet.nextAt, pet.exprUntil + .6); }
 
   function setExpr(n, seconds) {
+    cancelGesture();
     if (n === 'sleep') { act('sleep'); return; }
     if (busy()) return;
     if (n === 'dragged') {
@@ -267,6 +284,7 @@ export function createPet(els, opts) {
    * Returns false for a word it does not know or cannot take now.
    */
   function doWord(w) {
+    if (!stationaryGesture(w) && (KIT_MOTIONS.includes(w) || KIT_EXPRESSIONS.includes(w) || words[w])) cancelGesture();
     if (w === 'neutral') { setExpr('neutral', .1); return true; }
     if (w === 'walk' || w === 'run') {
       const x = pet.x < W / 2 ? W * (.55 + Math.random() * .35) : W * (.1 + Math.random() * .35);
@@ -286,6 +304,7 @@ export function createPet(els, opts) {
 
   /** Walks (or runs) to stage x. Resolves the walk through onEvent('arrived' | 'interrupted'). */
   function walkTo(x, run, walkId) {
+    cancelGesture();
     if (busy()) return false;
     if (pet.mode === 'sleep' || pet.mode === 'sit') setMode('wake', { startle: true });
     const target = clamp(x, minX(), maxX());
@@ -500,6 +519,8 @@ export function createPet(els, opts) {
       }
     }
 
+    if (pendingGesture && !busy() && !['land', 'wake', 'dizzy'].includes(pet.mode) && !press) act(pendingGesture);
+
     // short gestures layered over whatever the body is doing
     // (a figure that lists a gesture in `figure.gestures` draws it itself, from the frame's `gesture`)
     if (pet.pulse) {
@@ -686,6 +707,7 @@ export function createPet(els, opts) {
   function pointerDown(p) {
     Object.assign(pointer, { x: p.x, y: p.y, inside: true });
     if (!hitPet(p) || pet.mode === 'air') return false;
+    cancelGesture();
     press = { x: p.x, y: p.y, t: now(p) };
     pointer.samples = [{ t: now(p), x: p.x, y: p.y }];
     return true;
@@ -819,6 +841,7 @@ export function createPet(els, opts) {
     setFigure(fig) {
       if (fig === custom) return;
       // a swapped-out figure may hold a WebGL context; release it now instead of waiting for GC
+      cancelGesture();
       custom?.dispose?.();
       custom = fig;
       custom.setSkin?.(skin);
@@ -833,8 +856,8 @@ export function createPet(els, opts) {
     /** Outside orders keep free roaming quiet for `seconds`. */
     holdRoam(seconds) { hold = Math.max(hold, T + seconds); },
     talk() { pet.talkK = 1; },
-    setListening(on) { pet.listening = on; if (on && (pet.mode === 'walk' || pet.mode === 'run')) setMode('idle'); },
-    setThinking(on) { pet.thinking = on; },
+    setListening(on) { if (on) cancelGesture(); pet.listening = on; if (on && (pet.mode === 'walk' || pet.mode === 'run')) setMode('idle'); },
+    setThinking(on) { if (on) cancelGesture(); pet.thinking = on; },
     anchor,
     emitHeart,
   };
