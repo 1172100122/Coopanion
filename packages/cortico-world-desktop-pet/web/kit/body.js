@@ -13,6 +13,7 @@
  * happens to the body is told through `opts.onEvent`; the page around the frame does the rest.
  */
 export { createRig } from './rig.js';
+import { createPointerGaze } from './pointer-gaze.js';
 
 export const f = n => Math.round(n * 10) / 10;
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -121,12 +122,17 @@ const HITS = [[128, 128, 108]];
  * leaves them out, and the frame's `gesture` ({ kind, k: 0..1 }, or null) says which one is playing and how far.
  * `figure.stationaryGestures`, if present, names gestures that need the full body: they stop locomotion,
  * wait for landing when requested in the air, and are canceled by a newer command or direct interaction.
+ * `figure.pointerGazeSeconds` opts into an entry-triggered, real-time gaze window (other figures keep
+ * continuous pointer tracking). `frame.pointerGaze` says whether that window is currently active.
  * `figure.anchors`, `figure.extent` ([x0, y0, x1, y1]) and `figure.hits` ([[x, y, r]]) are in logo units; each
  * is read every frame, so a getter may follow the skin. `figure.setSkin(skin)` hears each skin change.
  */
 export function createPet(els, opts) {
   const { petG, shadowEl, fxG } = els;
   let custom = opts.figure;
+  const makeGaze = () => custom?.pointerGazeSeconds > 0 ? createPointerGaze(custom.pointerGazeSeconds, opts.clock) : null;
+  let gaze = makeGaze();
+  const gazePoint = { x: 0, y: 0, inside: false };
   const sfx = opts.sfx;
   const play = (name, kind, ...args) => (sfx.play ? sfx.play(name, kind, ...args) : sfx[name]?.(...args));
   const onEvent = opts.onEvent || (() => {});
@@ -371,9 +377,13 @@ export function createPet(els, opts) {
     if (pet.blinkT <= 0) { pet.blinkAge = 0; pet.blinkT = Math.random() < .2 ? .28 : rnd(2.2, 5.2); }
 
     const head = toStage(A.gaze[0], A.gaze[1]);
-    const pdx = pointer.x - head.x, pdy = pointer.y - head.y, pm = Math.hypot(pdx, pdy) || 1;
+    const target = gaze ? gazePoint : pointer;
+    const pdx = target.x - head.x, pdy = target.y - head.y, pm = Math.hypot(pdx, pdy) || 1;
+    const tracking = target.inside && (!gaze || gaze.active);
     const track = () => {
-      if (!pointer.inside) {
+      // Sprite figures need a genuine neutral idle, not the legacy body's random idle glances.
+      if (gaze && !tracking) return [0, 0];
+      if (!tracking) {
         if (T > pet.glanceAt) { pet.glance = Math.random() < .45 ? [0, 0] : [rnd(-3, 5), rnd(-3, 3)]; pet.glanceAt = T + rnd(1.2, 3); }
         return pet.glance;
       }
@@ -384,7 +394,7 @@ export function createPet(els, opts) {
     switch (m) {
       case 'idle': {
         lookT = track();
-        if (pointer.inside && !press && pdx * pet.facing < -50 && pm < 600) {
+        if (tracking && !press && pdx * pet.facing < -50 && pm < 600) {
           pet.turnAcc += dt;
           if (pet.turnAcc > .9) { pet.facing *= -1; pet.turnAcc = 0; }
         } else pet.turnAcc = 0;
@@ -663,6 +673,7 @@ export function createPet(els, opts) {
     const gesture = pet.pulse ? { kind: pet.pulse.kind, k: clamp((T - pet.pulse.t0) / pet.pulse.dur, 0, 1) } : null;
     custom.draw(petG, face, {
       look: pet.look, legs, low: pet.low, t: T, blink, eyeClose, acc: skin, swing: pet.swing,
+      pointerGaze: gaze ? gaze.active && gazePoint.inside : undefined,
       face: fname, mode: pet.mode, modeT: pet.modeT, talk: pet.talkK, drowse: pet.drowse, sit: pet.sitK, facing: pet.faceVis, tilt: pet.tilt, lean, groupRot: rot, gesture,
     });
 
@@ -714,7 +725,10 @@ export function createPet(els, opts) {
   }
   /** Returns the cursor the stage should show. */
   function pointerMove(p) {
+    gaze?.observe(p, hitPet(p));
+    if (gaze) Object.assign(gazePoint, { x: p.x, y: p.y, inside: true });
     const t = now(p);
+    const wasOver = hitPet(pointer);
     const ddx = p.x - pointer.x, ddy = p.y - pointer.y;
     Object.assign(pointer, { x: p.x, y: p.y, inside: true });
     pointer.samples.push({ t, x: p.x, y: p.y });
@@ -732,7 +746,8 @@ export function createPet(els, opts) {
     if (press) return (pet.cursor = 'grabbing');
     const over = hitPet(p);
     if (over && ['idle', 'look', 'sit', 'sleep'].includes(pet.mode)) {
-      strokeAcc += Math.hypot(ddx, ddy);
+      // Entering from an unknown/far-away cursor is a glance, not a giant first petting stroke.
+      strokeAcc += gaze && !wasOver ? 0 : Math.hypot(ddx, ddy);
       if (strokeAcc > 320 && petCool <= 0) {
         strokeAcc = 0; petCool = 2.5;
         play('purr', 'touch');
@@ -801,7 +816,20 @@ export function createPet(els, opts) {
     for (const s of pointer.samples) { s.x += dx; s.y += dy; }
     if (press) { press.x += dx; press.y += dy; }
   }
-  function pointerLeave() { if (!press) pointer.inside = false; }
+  function pointerLeave(p) {
+    // Native click-through toggles can synthesize a leave while still on the body.
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !hitPet(p)) {
+      gaze?.leave(p); gazePoint.inside = false;
+    }
+    if (!press) pointer.inside = false;
+  }
+  /** Passive native cursor reports: gaze only, never drag velocity, patting or touch events. */
+  function pointerCursor(p) {
+    if (!gaze) return;
+    gaze.observe(p, !!p && hitPet(p), 'cursor');
+    if (p) Object.assign(gazePoint, { x: p.x, y: p.y, inside: true });
+    else gazePoint.inside = false;
+  }
 
   /** Head top in stage pixels, for placing a speech bubble. */
   const anchor = () => toStage(A.bubble[0], A.bubble[1] + pet.low);
@@ -826,9 +854,10 @@ export function createPet(els, opts) {
 
   resize();
   custom?.setSkin?.(skin);
+  if (gaze) render(); // The initial passive cursor baseline needs the real hit geometry.
   return {
     pet, step, render, resize, act, setExpr, doWord, walkTo, stopWalk, toStage, hitPet, busy, layout,
-    pointerDown, pointerMove, pointerUp, pointerLeave, dropAt, shiftDrag,
+    pointerDown, pointerMove, pointerUp, pointerLeave, pointerCursor, suspendGaze: () => gaze?.suspend(), dropAt, shiftDrag,
     get pressing() { return !!press; },
     /** Pressed, carried, airborne, walking, running, dancing, turning round, or in a short gesture (nod, wave, bow…): motion that frames far apart show as jumps. */
     get moving() {
@@ -844,6 +873,8 @@ export function createPet(els, opts) {
       cancelGesture();
       custom?.dispose?.();
       custom = fig;
+      gaze = makeGaze();
+      gazePoint.inside = false;
       custom.setSkin?.(skin);
       A = anchors();
       petG.textContent = '';
@@ -922,7 +953,9 @@ export function createBody(host, opts) {
       if (type === 'down') ctl.pointerDown(p);
       else if (type === 'move') ctl.pointerMove(p);
       else if (type === 'up' || type === 'cancel') ctl.pointerUp(p);
-      else if (type === 'leave') ctl.pointerLeave();
+      else if (type === 'leave') ctl.pointerLeave(p);
+      else if (type === 'cursor') ctl.pointerCursor(p);
+      else if (type === 'suspend') ctl.suspendGaze();
     },
     drop: ctl.dropAt,
     shift: ctl.shiftDrag,

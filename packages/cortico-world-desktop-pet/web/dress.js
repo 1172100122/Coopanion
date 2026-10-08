@@ -35,11 +35,11 @@ const bounds = () => ({ W: preview.clientWidth, H: preview.clientHeight, floorY:
 /** The body in the preview (body-host.js), and the page's clock. */
 let body = null, T = 0;
 new ResizeObserver(() => body?.set({ bounds: bounds() })).observe(preview);
-const local = (e) => { const r = preview.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, t: e.timeStamp }; };
+const local = (e) => { const r = preview.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, screenX: e.screenX, screenY: e.screenY, t: e.timeStamp }; };
 preview.addEventListener('pointerdown', (e) => { const p = local(e); body?.pointer('down', p); if (body?.hit(p)) preview.setPointerCapture(e.pointerId); });
 preview.addEventListener('pointermove', (e) => body?.pointer('move', local(e)));
 preview.addEventListener('pointerup', (e) => body?.pointer('up', local(e)));
-preview.addEventListener('pointerleave', () => body?.pointer('leave', {}));
+preview.addEventListener('pointerleave', (e) => body?.pointer('leave', local(e)));
 
 modeBtn.addEventListener('click', () => {
   theme = theme === 'dark' ? 'light' : 'dark';

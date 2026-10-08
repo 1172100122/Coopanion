@@ -36,7 +36,7 @@ Coopanion 是一个桌宠。桌宠 **Coo** 待在屏幕底边，可以用气泡�
 
 ![1790222143546](image/README/1790222143546.png)
 
-Hachimist 已补充坐下、睡觉和文字说话口型素材；持续看向鼠标时也会眨眼，招手会先停下走动，落地后再处理等待中的招手。口型由文字/说话事件驱动，不是音频音素同步。时序与限制见[形象说明](packages/cortico-world-desktop-pet/web/hachimist/README.md)。
+Hachimist 已补充坐下、睡觉和文字说话口型素材；鼠标进入角色点击区域后看向鼠标约 4 秒，随后回到待机和眨眼；停留不续时，移出后重新进入才再次触发。注视期间仍会眨眼，招手会先停下走动，落地后再处理等待中的招手。口型由文字/说话事件驱动，不是音频音素同步。时序与限制见[形象说明](packages/cortico-world-desktop-pet/web/hachimist/README.md)。
 
 ## 功能
 

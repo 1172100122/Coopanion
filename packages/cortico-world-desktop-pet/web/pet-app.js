@@ -132,6 +132,7 @@ async function swapBody(s) {
   next.set({ roam: prefs.roam, ...bodyState });
   body?.dispose();
   body = next;
+  if (body.pack === 'hachimist' && cursor.at) body.pointer('cursor', cursor.at);
   words = new Map(pack.vocab.map((w) => [w.id, w]));
   sfx.usePack(pack.base, pack.sounds);
   reportFigure(s.figure, true, null, s.figure === 'coo' ? null : s.scheme);
@@ -1071,7 +1072,7 @@ document.addEventListener('pointermove', (e) => {
   const p = { x: e.clientX, y: e.clientY };
   cursor.at = p;
   // while the window moves to another display, moves may come in either display's coordinates; the drag shifts over once it has moved
-  if (!shifting) body?.pointer('move', { ...p, t: e.timeStamp });
+  if (!shifting) body?.pointer('move', { ...p, screenX: e.screenX, screenY: e.screenY, t: e.timeStamp });
   const hit = !!body?.hit(p), ui = !!overUi(e);
   diag.move = { at: performance.now(), type: e.pointerType, x: Math.round(p.x), y: Math.round(p.y), hit, ui };
   diag.types.add(e.pointerType);
@@ -1090,6 +1091,8 @@ document.addEventListener('pointermove', (e) => {
  */
 host?.onCursor?.((p) => {
   cursor.at = p;
+  // Native polling recovers moves missed by a click-through window without synthesizing touches.
+  if (!shifting && body?.pack === 'hachimist') body.pointer('cursor', p);
   if (!p) {
     diag.poll = { at: performance.now(), off: true };
     if (!pressing) setInteractive(false, 'poll');
@@ -1164,7 +1167,10 @@ stage.addEventListener('pointerup', async (e) => {
   }
 });
 stage.addEventListener('pointercancel', up);
-document.addEventListener('pointerleave', () => { cursor.at = null; body?.pointer('leave', {}); });
+document.addEventListener('pointerleave', (e) => {
+  cursor.at = null;
+  body?.pointer('leave', { x: e.clientX, y: e.clientY, screenX: e.screenX, screenY: e.screenY });
+});
 stage.addEventListener('dblclick', (e) => { if (prefs.doubleClickChat && body?.hit({ x: e.clientX, y: e.clientY })) openInput(); });
 document.addEventListener('contextmenu', (e) => {
   e.preventDefault();

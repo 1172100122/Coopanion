@@ -38,7 +38,7 @@ The app is in Chinese and English. The first-run guide is currently Chinese only
 
 ![1790222143546](image/README/1790222143546.png)
 
-Hachimist includes pointer-compatible blinking, interruptible full-body waving, and separate sitting, sleeping and text-driven talking animations. Talking is not audio/phoneme lip-sync. See the [figure notes](packages/cortico-world-desktop-pet/web/hachimist/README.md) for timing and limitations.
+Hachimist looks toward the pointer for four seconds after it enters her hit region, then resumes idle/blinking. Staying over her does not extend the glance; leave and re-enter to start another. She includes interruptible full-body waving, and separate sitting, sleeping and text-driven talking animations. Talking is not audio/phoneme lip-sync. See the [figure notes](packages/cortico-world-desktop-pet/web/hachimist/README.md) for timing and limitations.
 
 ## Features
 

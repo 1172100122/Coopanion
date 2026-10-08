@@ -312,8 +312,8 @@ function runPetHost({ url, parentPid = 0, tray: withTray = true }) {
       if (!win || !win.isVisible()) return;
       const pt = screen.getCursorScreenPoint(), b = win.getBounds();
       const inside = pt.x >= b.x && pt.x < b.x + b.width && pt.y >= b.y && pt.y < b.y + b.height;
-      const at = inside ? { x: pt.x - b.x, y: pt.y - b.y } : null;
-      const key = at ? `${at.x},${at.y}` : '';
+      const at = inside ? { x: pt.x - b.x, y: pt.y - b.y, screenX: pt.x, screenY: pt.y } : null;
+      const key = at ? `${at.x},${at.y},${at.screenX},${at.screenY}` : '';
       if (key === last) return;
       last = key;
       win.webContents.send('pet:cursor', at);

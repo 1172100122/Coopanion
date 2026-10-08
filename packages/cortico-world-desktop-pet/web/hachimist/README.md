@@ -13,7 +13,9 @@ The renderer crops the original atlas in SVG. It does not repaint the character,
 ## Animation mapping and limits
 
 - Idle → original idle loop; pointer tracking / look → all 16 directional frames, clockwise from up
-- Natural blinking uses the kit's blink clock even while the pointer keeps a directional gaze active
+- Pointer entry starts a four-second gaze window. Motion inside does not extend it; leave and re-enter for a new window. The trigger uses the existing two circular hit regions (`[128,112,57]` and `[128,202,52]` in figure units), not a pixel-alpha silhouette. It follows received cursor positions outside the body during that window, then returns to neutral idle/blinking. Explicit `look` remains its separate scripted scan.
+- The deadline uses monotonic real time, so hidden/throttled animation frames cannot prolong it. Blur/hidden cancels the window without rearming the same hover; a figure reload starts inactive. Native cursor observations cover click-through gaps without generating touches; unchanged screen coordinates never trigger an entry just because the body moves. Coordinates outside the current pet window are unavailable.
+- Natural blinking uses the kit's blink clock during a gaze window; physical movement, waves, rest, expressions and speaking still take priority. The window continues to expire while those actions play. Coo and other figures keep their existing behavior.
 - Walk / run → right- or left-running loop; the left row cancels the kit's horizontal flip because its source already faces left
 - Wave stops walking/running before its full-body animation starts. If requested during carrying or a jump, one pending wave waits until the body settles. Repeated pending waves coalesce; a newer command, listening/thinking cue, direct touch or figure replacement cancels stale gestures. Other figures retain their existing layered gestures.
 - Jump / hop → original takeoff, airborne and landing frames
@@ -42,6 +44,8 @@ From the repository root:
 node packages/cortico-world-desktop-pet/examples/hachimist/serve.mjs
 ```
 
-Open `http://127.0.0.1:4319`. This loads the actual `body-host.js` / `figure-frame.js` sandbox without starting an agent, connecting a model provider, or requesting microphone/desktop access. Check Idle, Wave, Jump, Walk left, Run right, Thinking, Listening, Review, Sad, sleep fallback, both themes, repeated reload, and drag/release. The status line reports readiness and physical mode.
+Open `http://127.0.0.1:4319`. This loads the actual `body-host.js` / `figure-frame.js` sandbox without starting an agent, connecting a model provider, or requesting microphone/desktop access. Check entry, four-second expiry while hovering/moving, exit/re-entry, blur and repeated reload; then Idle, Wave, Jump, Walk left, Run right, Thinking, Listening, Review, Sad, Sit, Sleep, Talk, both themes and drag/release. The status line reports readiness and physical mode.
 
 Automated coverage is in `tests/hachimist.test.js`: exact atlas checksum, grid/state counts, 16 directions, mappings, crop/frame reuse, left-facing correction, dimension failure, defaults/fallback, all advertised actions, walking interruption and repeated disposal.
+
+Bounded-gaze regression coverage is in `tests/hachimist-gaze.test.js`, alongside animation and gesture-scheduling coverage.

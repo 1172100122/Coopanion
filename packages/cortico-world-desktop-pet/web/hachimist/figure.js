@@ -42,9 +42,9 @@ export function spriteState(frame) {
   if (frame.face === 'thinking') return 'running';
   if (frame.face === 'sad' || frame.face === 'worried' || frame.face === 'cry') return 'failed';
   if (frame.face === 'happy' || frame.face === 'love' || frame.face === 'excited') return 'review';
-  // The kit's blink clock must still win when a persistent pointer keeps the gaze nonzero.
+  // Blinks stay visible during the bounded pointer gaze.
   if (frame.blink > .1 || frame.eyeClose > .4) return 'blink';
-  if (frame.mode === 'look' || Math.hypot(...(frame.look ?? [0, 0])) > 2) return 'look';
+  if (frame.mode === 'look' || (frame.pointerGaze ?? (Math.hypot(...(frame.look ?? [0, 0])) > 2))) return 'look';
   return 'idle';
 }
 
@@ -89,6 +89,7 @@ export async function createHachimistFigure(base, { loadImage, asset }) {
     anchors: { gaze: [128, 111], bubble: [128, 27], z: [182, 40], hearts: [94, 166, 55], tear: [148, 123] },
     gestures: ['wave'],
     stationaryGestures: ['wave'],
+    pointerGazeSeconds: 4,
     draw(petG, face, frame) {
       if (!viewport || viewport.parentNode !== petG) {
         previousCell = '';

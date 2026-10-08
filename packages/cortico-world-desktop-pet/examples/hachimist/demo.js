@@ -32,6 +32,6 @@ const controls = [
 for (const [label, action] of controls) { const button = document.createElement('button'); button.textContent = label; button.onclick = action; document.querySelector('#actions').appendChild(button); }
 function tick(now) { if (!destroyed) { body.tick(Math.min(.05, (now - previous) / 1000)); if (body.layout) status.textContent = `Figure: ${body.pack} · Mode: ${body.layout.mode} · Facing: ${body.layout.facing < 0 ? 'left' : 'right'} · Sandbox ready`; } previous = now; requestAnimationFrame(tick); }
 requestAnimationFrame(tick);
-const point = (e) => { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, t: performance.now() }; };
+const point = (e) => { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, screenX: e.screenX, screenY: e.screenY, t: performance.now() }; };
 for (const [event, type] of [['pointerdown','down'],['pointermove','move'],['pointerup','up'],['pointercancel','cancel'],['pointerleave','leave']]) stage.addEventListener(event, (e) => { if (type === 'down') stage.setPointerCapture(e.pointerId); body.pointer(type, point(e)); });
 addEventListener('resize', () => body.set({ bounds: bounds() }));

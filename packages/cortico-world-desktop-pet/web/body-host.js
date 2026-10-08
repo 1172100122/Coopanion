@@ -95,12 +95,18 @@ export function loadBody({ layer, pack, start, theme, bounds, onEvent, onSound, 
     const waits = new Map();
     const post = (m) => { if (!gone) frame.contentWindow?.postMessage(m, '*'); };
     const timer = setTimeout(() => fail(new Error(`形象 ${READY_MS / 1000} 秒内没有准备好`)), READY_MS);
+    const suspendGaze = () => { if (pack.id === 'hachimist') post({ t: 'pointer', type: 'suspend', p: {} }); };
+    const visibility = () => { if (document.hidden) suspendGaze(); };
+    addEventListener('blur', suspendGaze);
+    document.addEventListener('visibilitychange', visibility);
 
     function close() {
       if (gone) return;
       gone = true;
       clearTimeout(timer);
       removeEventListener('message', onMessage);
+      removeEventListener('blur', suspendGaze);
+      document.removeEventListener('visibilitychange', visibility);
       frame.remove();
       for (const done of waits.values()) done();
       waits.clear();
@@ -121,8 +127,11 @@ export function loadBody({ layer, pack, start, theme, bounds, onEvent, onSound, 
       do: (word) => post({ t: 'do', word }),
       walk: (x, run, id) => post({ t: 'walk', x, run, id }),
       stopWalk: (id) => post({ t: 'stop-walk', id }),
-      /** `type`: down, move, up, cancel, leave; `p` in stage pixels with `t` (ms). */
-      pointer(type, p) { if (type !== 'leave') touches.input(performance.now()); post({ t: 'pointer', type, p }); },
+      /** `cursor`/`suspend` are passive gaze observations; only physical input authorizes a touch. */
+      pointer(type, p) {
+        if (['down', 'move', 'up', 'cancel'].includes(type)) touches.input(performance.now());
+        post({ t: 'pointer', type, p });
+      },
       drop(p) { touches.input(performance.now()); post({ t: 'drop', p }); },
       shift: (dx, dy) => post({ t: 'shift', dx, dy }),
       place: (x, facing) => post({ t: 'place', x, facing }),
