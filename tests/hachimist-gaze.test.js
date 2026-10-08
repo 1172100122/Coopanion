@@ -176,7 +176,7 @@ describe('Hachimist gaze through the real body', () => {
 });
 
 describe('gaze host lifecycle and input isolation', () => {
-  it('passive cursor/suspend cannot authorize touches; blur/hidden cancel and disposal removes listeners', async () => {
+  it('passive cursor/suspend/cancel cannot authorize touches; blur/hidden cancel and disposal removes listeners', async () => {
     const dom = new JSDOM('<div id="layer"></div>', { url: 'http://localhost/' });
     const { window } = dom;
     vi.stubGlobal('document', window.document);
@@ -192,7 +192,7 @@ describe('gaze host lifecycle and input isolation', () => {
       const receive = data => window.dispatchEvent(new window.MessageEvent('message', { source: frame.contentWindow, data }));
       receive({ t: 'ready' }); body = await loading;
       const touch = () => receive({ t: 'frame', layout: {}, events: [{ kind: 'touch', detail: { kind: 'poke' } }] });
-      body.pointer('cursor', point(100)); body.pointer('suspend', {}); touch(); expect(events).toHaveLength(0);
+      body.pointer('cursor', point(100)); body.pointer('suspend', {}); body.pointer('cancel', {}); touch(); expect(events).toHaveLength(0);
       window.dispatchEvent(new window.Event('blur'));
       Object.defineProperty(window.document, 'hidden', { configurable: true, value: true });
       window.document.dispatchEvent(new window.Event('visibilitychange'));

@@ -90,7 +90,7 @@ export function loadBody({ layer, pack, start, theme, bounds, onEvent, onSound, 
     frame.className = 'figure-frame';
     frame.src = '/figure-frame';
     let ready = false, gone = false, seq = 0, size = bounds;
-    let layout = null, z = null;
+    let layout = null, z = null, localHalo = false, halo = null;
     const touches = touchGate();
     const waits = new Map();
     const post = (m) => { if (!gone) frame.contentWindow?.postMessage(m, '*'); };
@@ -127,9 +127,9 @@ export function loadBody({ layer, pack, start, theme, bounds, onEvent, onSound, 
       do: (word) => post({ t: 'do', word }),
       walk: (x, run, id) => post({ t: 'walk', x, run, id }),
       stopWalk: (id) => post({ t: 'stop-walk', id }),
-      /** `cursor`/`suspend` are passive gaze observations; only physical input authorizes a touch. */
+      /** Passive cursor/lifecycle cancellation never authorizes touches; only physical input does. */
       pointer(type, p) {
-        if (['down', 'move', 'up', 'cancel'].includes(type)) touches.input(performance.now());
+        if (['down', 'move', 'up'].includes(type)) touches.input(performance.now());
         post({ t: 'pointer', type, p });
       },
       drop(p) { touches.input(performance.now()); post({ t: 'drop', p }); },
@@ -145,8 +145,12 @@ export function loadBody({ layer, pack, start, theme, bounds, onEvent, onSound, 
         post({ t: 'scheme', id, fade: o.fade ?? 0, at: o.at ?? 0, seq: s });
         return new Promise((done) => waits.set(s, done));
       },
-      /** The light halo behind the body (pet-app's backdrop), as a CSS filter on the frame: 0 removes it. */
+      /** Kit bodies bound the halo to their painted group; older packs retain the frame filter. */
       setHalo(k) {
+        k = Math.round(clampTo(num(k), 0, 1) * 100) / 100;
+        if (halo === k) return;
+        halo = k;
+        if (localHalo) { post({ t: 'halo', k }); return; }
         const c = `rgba(184,184,184,${k.toFixed(2)})`;
         frame.style.filter = k ? `drop-shadow(0 0 3px ${c}) drop-shadow(0 0 7px ${c})` : '';
       },
@@ -166,6 +170,7 @@ export function loadBody({ layer, pack, start, theme, bounds, onEvent, onSound, 
         } catch (err) { fail(err); }
       } else if (m.t === 'ready' && !ready) {
         ready = true;
+        localHalo = m.localHalo === true;
         clearTimeout(timer);
         z = typeof m.z === 'string' ? m.z : null;
         resolve(body);

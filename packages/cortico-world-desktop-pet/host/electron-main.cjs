@@ -16,8 +16,9 @@
  * carries the reason macOS shows). The keyboard is not taken for a question's number keys there:
  * macOS gives no way to hand it back to the app that had it.
  */
-const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, session, shell, systemPreferences } = require('electron');
+const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, powerMonitor, screen, session, shell, systemPreferences } = require('electron');
 const { join } = require('node:path');
+const { bindRenderLifecycle } = require('./render-lifecycle.cjs');
 
 /** Milliseconds between the cursor reports the page gets. */
 const CURSOR_EVERY_MS = 100;
@@ -256,7 +257,7 @@ function trayIcon() {
 function runPetHost({ url, parentPid = 0, tray: withTray = true }) {
   if (!url) throw new Error('pet host needs --pet-url');
   const origin = new URL(url).origin;
-  let win = null, tray = null, dress = null;
+  let win = null, tray = null, dress = null, renderLifecycle = null;
   /** Id of the display whose work area the window covers. */
   let displayId = null;
   /** The setting, and whether it is what hid the window. */
@@ -307,9 +308,9 @@ function runPetHost({ url, parentPid = 0, tray: withTray = true }) {
     });
     win.once('ready-to-show', () => win.showInactive());
     // the page learns where the cursor is even when the click-through window misses its moves
-    let last = '';
-    const cursorTimer = setInterval(() => {
-      if (!win || !win.isVisible()) return;
+    let last = null, cursorTimer = null;
+    const pollCursor = () => {
+      if (!win || win.isDestroyed()) return;
       const pt = screen.getCursorScreenPoint(), b = win.getBounds();
       const inside = pt.x >= b.x && pt.x < b.x + b.width && pt.y >= b.y && pt.y < b.y + b.height;
       const at = inside ? { x: pt.x - b.x, y: pt.y - b.y, screenX: pt.x, screenY: pt.y } : null;
@@ -317,7 +318,14 @@ function runPetHost({ url, parentPid = 0, tray: withTray = true }) {
       if (key === last) return;
       last = key;
       win.webContents.send('pet:cursor', at);
-    }, CURSOR_EVERY_MS);
+    };
+    renderLifecycle = bindRenderLifecycle({ win, powerMonitor, onChange: (active) => {
+      if (cursorTimer !== null) clearInterval(cursorTimer);
+      cursorTimer = null;
+      last = null;
+      if (active) { pollCursor(); cursorTimer = setInterval(pollCursor, CURSOR_EVERY_MS); }
+      else if (win && !win.isDestroyed()) win.setIgnoreMouseEvents(true, { forward: true });
+    } });
     // hidden while the setting is on and a window fills the pet's monitor; shown again once neither holds
     const fullscreenTimer = fullscreen && setInterval(() => {
       if (!win) return;
@@ -325,7 +333,7 @@ function runPetHost({ url, parentPid = 0, tray: withTray = true }) {
       if (covered && !autoHidden && win.isVisible()) { autoHidden = true; win.hide(); }
       else if (!covered && autoHidden) { autoHidden = false; win.showInactive(); }
     }, FULLSCREEN_EVERY_MS);
-    win.on('closed', () => { clearInterval(cursorTimer); clearInterval(fullscreenTimer); win = null; });
+    win.on('closed', () => { renderLifecycle?.dispose(); renderLifecycle = null; clearInterval(fullscreenTimer); win = null; });
     // page console lines reach the World's log through stdout
     win.webContents.on('console-message', (e) => { if (e.level !== 'debug') console.log(`[page:${e.level}] ${e.message}`); });
     win.webContents.on('did-fail-load', (_e, code, desc, failedUrl) => console.log(`[page:error] 加载失败 ${code} ${desc} ${failedUrl}`));
@@ -339,9 +347,10 @@ function runPetHost({ url, parentPid = 0, tray: withTray = true }) {
     dress.loadURL(target);
   };
 
-  ipcMain.on('pet:interactive', (_e, on) => { if (win) win.setIgnoreMouseEvents(!on, { forward: true }); });
+  ipcMain.on('pet:request-render-state', (e) => { if (win && e.sender === win.webContents) renderLifecycle?.refresh(true); });
+  ipcMain.on('pet:interactive', (_e, on) => { if (win) win.setIgnoreMouseEvents(!(on && renderLifecycle?.active), { forward: true }); });
   ipcMain.on('pet:focus', () => {
-    if (!win) return;
+    if (!win || !renderLifecycle?.active) return;
     // Explicit text input activates this menu-bar process as well as its window.
     if (process.platform === 'darwin') app.focus({ steal: true });
     win.focus();
@@ -349,7 +358,7 @@ function runPetHost({ url, parentPid = 0, tray: withTray = true }) {
   /** The window that had the keyboard before a question took it; it gets it back afterwards. */
   let lent = 0n;
   ipcMain.on('pet:grabFocus', () => {
-    if (!win || !win.isVisible() || process.platform === 'darwin') return;
+    if (!win || !renderLifecycle?.active || process.platform === 'darwin') return;
     if (foreground) {
       const own = hwndOf(win), cur = foreground.current();
       if (cur !== own && foreground.give(own)) lent = cur;
@@ -364,11 +373,16 @@ function runPetHost({ url, parentPid = 0, tray: withTray = true }) {
     if (foreground) { if (back && foreground.current() === hwndOf(win)) foreground.give(back); }
     else if (win.isFocused()) win.blur();
   });
+  ipcMain.on('pet:show', (e) => {
+    if (!win || win.isDestroyed() || e.sender !== win.webContents || e.senderFrame !== win.webContents.mainFrame) return;
+    if (win.isMinimized()) win.restore();
+    win.showInactive();
+  });
   ipcMain.on('pet:hide', () => { if (win) win.hide(); });
   ipcMain.on('pet:hideWhenFullscreen', (_e, on) => { hideWhenFullscreen = !!on; });
   ipcMain.on('pet:openDress', () => openDress());
   ipcMain.handle('pet:sampleBackdrop', (_e, query) => {
-    try { return win ? sampleBackdrop(win, query || {}) : []; } catch { return []; }
+    try { return win && renderLifecycle?.active ? sampleBackdrop(win, query || {}) : []; } catch { return []; }
   });
   /**
    * A drag carried or let go of outside the window: when the cursor is over another display, the
@@ -376,7 +390,7 @@ function runPetHost({ url, parentPid = 0, tray: withTray = true }) {
    * how far a point on screen moved in page coordinates (`dx`, `dy`); null leaves it where it is.
    */
   ipcMain.handle('pet:followCursor', () => {
-    if (!win) return null;
+    if (!win || !renderLifecycle?.active) return null;
     const pt = screen.getCursorScreenPoint(), d = screen.getDisplayNearestPoint(pt);
     const fromDisplay = display();
     if (d.id === fromDisplay.id) return null;

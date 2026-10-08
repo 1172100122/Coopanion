@@ -243,6 +243,8 @@ export class DesktopPetWorld implements World {
   private readonly cfg: DesktopPetConfigSection;
   private readonly server: PetServer;
   private windowHost: WindowHost | null = null;
+  /** An explicit reveal requested before the native page finishes connecting. */
+  private showWindowPending = false;
   private readonly store: RuntimeStore;
   private funasr: FunAsrRecognizer | null = null;
   private system: SystemRecognizer | null = null;
@@ -305,7 +307,10 @@ export class DesktopPetWorld implements World {
       snapshot: () => this.snapshot(),
       onPetMessage: (msg) => this.onPage(msg),
       onAudio: (frame) => this.onAudio(frame),
-      onPetConnect: () => { this.log?.info('桌宠页面已连接'); },
+      onPetConnect: () => {
+        this.log?.info('桌宠页面已连接');
+        if (this.showWindowPending && this.server.petWindowConnected) this.showWindow();
+      },
       onPetDisconnect: () => this.onPageGone(),
       onSkin: (skin) => this.saveSkin(skin),
       onPrefs: (prefs) => this.savePrefs(prefs),
@@ -414,6 +419,7 @@ export class DesktopPetWorld implements World {
   }
 
   async stop(): Promise<void> {
+    this.showWindowPending = false;
     if (this.quiet) clearTimeout(this.quiet.timer);
     this.quiet = null;
     if (this.prefsTimer) clearInterval(this.prefsTimer);
@@ -574,6 +580,12 @@ export class DesktopPetWorld implements World {
     if (!this.windowHost || !this.server.port) return;
     const managed = this.store.electron.executable();
     this.windowHost.start(resolveHostCommand(this.petUrl, this.cfg.window.electronFile, managed));
+  }
+
+  /** Reveals the native page in place; never tears down its queued bubbles or socket. */
+  showWindow(): void {
+    this.showWindowPending = !(this.server.petWindowConnected && this.server.sendPet({ t: 'show-window' }));
+    if (this.showWindowPending) this.openWindow();
   }
 
   /* ---------- page protocol ---------- */
@@ -1496,7 +1508,8 @@ export class DesktopPetWorld implements World {
       switch (method) {
         case 'state': return this.petState();
         case 'openWindow': this.openWindow(); return this.petState();
-        case 'closeWindow': await this.windowHost?.stop(); return this.petState();
+        case 'showWindow': this.showWindow(); return this.petState();
+        case 'closeWindow': this.showWindowPending = false; await this.windowHost?.stop(); return this.petState();
         case 'installElectron': void this.store.electron.install(); return this.petState();
         case 'guide': {
           if (!this.opts.controls?.guide) throw new Error('这个应用没有引导');

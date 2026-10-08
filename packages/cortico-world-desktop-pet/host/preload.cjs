@@ -9,9 +9,18 @@ contextBridge.exposeInMainWorld('petHost', {
   grabFocus: () => ipcRenderer.send('pet:grabFocus'),
   releaseFocus: () => ipcRenderer.send('pet:releaseFocus'),
   hide: () => ipcRenderer.send('pet:hide'),
+  /** Reveal this same window; pending bubbles and the socket stay intact. */
+  show: () => ipcRenderer.send('pet:show'),
   /** Whether the window hides itself while a fullscreen window covers its display. */
   hideWhenFullscreen: (on) => ipcRenderer.send('pet:hideWhenFullscreen', !!on),
   openDress: () => ipcRenderer.send('pet:openDress'),
+  /** Native visibility/suspend state, independent of Chromium background throttling. */
+  onRenderState: (cb) => {
+    const listener = (_e, state) => cb(state);
+    ipcRenderer.on('pet:render-state', listener);
+    ipcRenderer.send('pet:request-render-state');
+    return () => ipcRenderer.removeListener('pet:render-state', listener);
+  },
   /** Where the cursor is, in page pixels, or null off the window: called a few times a second. */
   onCursor: (cb) => ipcRenderer.on('pet:cursor', (_e, p) => cb(p)),
   /** Screen pixels behind `rect`, minus `skip` rects (page coordinates), as a flat [r, g, b, …]; null where the screen cannot be read. */

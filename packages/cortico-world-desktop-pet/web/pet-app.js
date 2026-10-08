@@ -13,9 +13,12 @@ import { applyTheme, clamp, f, ICONS } from './ui.js';
 import { createSfx } from './sound.js';
 import { COO_CSS, mini, normalizeSkin, skinCss } from './coo/coo.js';
 import { loadBody } from './body-host.js';
+import { createFrameLoop } from './frame-loop.js';
 
 const $ = (s) => document.querySelector(s);
 const host = window.petHost || null;
+// Wait for native state before the first frame; Electron's document.hidden can stay false when hidden.
+let renderActive = !host?.onRenderState && !document.hidden, renderEpoch = 0;
 document.body.classList.add(host ? 'desk' : 'tab');
 
 const stage = $('#stage');
@@ -124,7 +127,7 @@ async function swapBody(s) {
     // the new body stands where the old one stood; the first one drops in
     start: { x, facing: was?.facing ?? (x < innerWidth / 2 ? 1 : -1), enter: body ? undefined : 'drop', skin: s, scheme: s.scheme },
     onEvent: (kind, d) => { if (body === holder.body) onBody(kind, d); },
-    onSound: (name, kind, ...args) => { if (body === holder.body) sfx.play(name, kind, ...args); },
+    onSound: (name, kind, ...args) => { if (renderActive && body === holder.body) sfx.play(name, kind, ...args); },
     onError: (err) => { if (body === holder.body) bodyFailed(pack.id, err); },
   });
   if (wanted !== s.figure) { next.dispose(); return; }
@@ -132,7 +135,8 @@ async function swapBody(s) {
   next.set({ roam: prefs.roam, ...bodyState });
   body?.dispose();
   body = next;
-  if (body.pack === 'hachimist' && cursor.at) body.pointer('cursor', cursor.at);
+  if (!renderActive) body.pointer('suspend', {});
+  else if (body.pack === 'hachimist' && cursor.at) body.pointer('cursor', cursor.at);
   words = new Map(pack.vocab.map((w) => [w.id, w]));
   sfx.usePack(pack.base, pack.sounds);
   reportFigure(s.figure, true, null, s.figure === 'coo' ? null : s.scheme);
@@ -191,6 +195,8 @@ function applyPrefs(p) {
 
 function onOrder(m) {
   switch (m.t) {
+    // This command comes from the World's socket; figure-frame messages never enter this path.
+    case 'show-window': host?.show?.(); break;
     case 'init': restorePosition(m.startX); applyPrefs(m); break;
     case 'prefs': applyPrefs(m); break;
     case 'watching': watching = true; stopMic(); break;
@@ -224,6 +230,8 @@ function onBody(kind, d) {
     walkTargets.delete(d.walkId);
     send({ t: kind, walkId: d.walkId, x: (typeof d.x === 'number' ? d.x : at()?.x ?? 0) / innerWidth, by: d.by });
   } else if (kind === 'touch') {
+    // A frame already in flight when hidden may report stale input; keep command completions above.
+    if (!renderActive) return;
     send({ t: 'touch', ...d });
     if (d.kind === 'grab') closeMenu();
   } else if (kind === 'mode') {
@@ -287,7 +295,7 @@ function closeBubble() {
  * away, and gives it back to the window that had it once the question is answered or gone.
  */
 function grabKeys(it) {
-  if (!host?.grabFocus || !it.options.length) return;
+  if (!renderActive || !host?.grabFocus || !it.options.length) return;
   it.grabbed = true;
   host.grabFocus();
 }
@@ -382,7 +390,7 @@ function showOptions(it) {
     b.style.animationDelay = (i * .07) + 's';
     b.addEventListener('click', () => answer(b, { index: i }));
     box.appendChild(b);
-    setTimeout(() => sfx.blub(), i * 70);
+    setTimeout(() => { if (renderActive && item === it) sfx.blub(); }, i * 70);
   });
   if (it.own) {
     const form = document.createElement('form');
@@ -403,7 +411,7 @@ function showOptions(it) {
 
 function answer(node, a) {
   const it = item;
-  if (!it || it.kind !== 'ask' || it.answered) return;
+  if (!renderActive || !it || it.kind !== 'ask' || it.answered) return;
   it.answered = true;
   sfx.select();
   node.classList.add('chosen');
@@ -421,7 +429,7 @@ function closeAsk(id) {
 }
 function dismissAsk() {
   const it = item;
-  if (!it || it.kind !== 'ask' || it.answered) return;
+  if (!renderActive || !it || it.kind !== 'ask' || it.answered) return;
   it.answered = true;
   send(it.confirm ? { t: 'confirmed', id: it.id, index: null } : { t: 'answer', askId: it.id, dismissed: true });
   closeBubble();
@@ -491,7 +499,7 @@ function showDialogInput(it) {
       c.innerHTML = `${image || (o.icon && ICONS[o.icon] ? `<span class="d-cardic">${ICONS[o.icon]}</span>` : '')}<span class="d-cardlbl">${esc(o.label)}</span>${o.level ? `<b class="d-level">${esc(o.level)}</b>` : ''}`;
       c.addEventListener('click', () => { sfx.tick(); pick(i, true); });
       cards.appendChild(c);
-      setTimeout(() => sfx.blub(), i * 70);
+      setTimeout(() => { if (renderActive && item === it) sfx.blub(); }, i * 70);
     });
     body.appendChild(cards);
     const row = Object.assign(document.createElement('div'), { className: 'd-row' });
@@ -543,7 +551,7 @@ function showDialogInput(it) {
     }
     // the window takes the keyboard so the box can be typed in right away
     host?.focus?.();
-    setTimeout(() => field.focus(), 30);
+    setTimeout(() => { if (renderActive && item === it) field.focus(); }, 30);
   } else if (input.kind === 'progress') {
     body.innerHTML = `<div class="d-bar${typeof it.progress === 'number' ? '' : ' wait'}"><i></i></div><div class="d-barlbl"><span></span><b></b></div>`;
     body.querySelector('.d-barlbl span').textContent = input.label || '';
@@ -574,7 +582,10 @@ function updateDialog(m) {
   if ('progress' in m) it.progress = m.progress;
   if (typeof m.text === 'string') {
     it.d = { ...it.d, text: m.text };
-    if (it === item) { it.text = m.text; it.shown = 0; it.acc = 0; }
+    if (it === item) {
+      it.text = m.text; it.shown = 0; it.acc = 0; it.readUntil = 0;
+      if (!it.d.input) it.bodyShown = false;
+    }
   }
   if (it === item) drawProgress(it);
 }
@@ -586,7 +597,7 @@ function endDialog(id) {
 }
 
 function settleDialog(it, answer) {
-  if (item !== it || it.answered) return;
+  if (!renderActive || item !== it || it.answered) return;
   it.answered = true;
   send({ t: 'dialog', id: it.id, ...answer });
   if (answer.done) { closeBubble(); return; }
@@ -644,7 +655,7 @@ function openInput() {
     closeBubble();
   });
   host?.focus?.();
-  setTimeout(() => input.focus(), 30);
+  setTimeout(() => { if (renderActive && input.isConnected) input.focus(); }, 30);
 }
 
 /* ---------- listening ---------- */
@@ -1067,6 +1078,7 @@ function writePointer(now) {
 const UI_SELECTOR = '.bubble:not([hidden]), .menu:not([hidden]), .tools:not([hidden])';
 const overUi = (e) => e.target.closest && e.target.closest(UI_SELECTOR);
 document.addEventListener('pointermove', (e) => {
+  if (!renderActive) return;
   pointerSeen = true;
   lastPointer.x = e.clientX; lastPointer.y = e.clientY;
   const p = { x: e.clientX, y: e.clientY };
@@ -1090,6 +1102,7 @@ document.addEventListener('pointermove', (e) => {
  * and the hover buttons would then stay.
  */
 host?.onCursor?.((p) => {
+  if (!renderActive) return;
   cursor.at = p;
   // Native polling recovers moves missed by a click-through window without synthesizing touches.
   if (!shifting && body?.pack === 'hachimist') body.pointer('cursor', p);
@@ -1104,15 +1117,15 @@ host?.onCursor?.((p) => {
   setInteractive(pressing || hit || ui, 'poll');
 });
 /** A press that began on the body and has not been let go of: the window keeps the mouse meanwhile. */
-let pressing = false;
+let pressing = false, capturedPointer = null;
 stage.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0) return;
+  if (!renderActive || e.button !== 0) return;
   closeMenu();
   const p = { x: e.clientX, y: e.clientY, t: e.timeStamp };
   body?.pointer('down', p);
-  if (body?.hit(p)) { pressing = true; stage.setPointerCapture(e.pointerId); e.preventDefault(); }
+  if (body?.hit(p)) { pressing = true; capturedPointer = e.pointerId; stage.setPointerCapture(e.pointerId); e.preventDefault(); }
 });
-const up = (e) => { pressing = false; body?.pointer('up', { x: e?.clientX ?? lastPointer.x, y: e?.clientY ?? lastPointer.y, t: e?.timeStamp ?? performance.now() }); stage.style.cursor = ''; };
+const up = (e) => { pressing = false; capturedPointer = null; if (renderActive) body?.pointer('up', { x: e?.clientX ?? lastPointer.x, y: e?.clientY ?? lastPointer.y, t: e?.timeStamp ?? performance.now() }); stage.style.cursor = ''; };
 /**
  * Most milliseconds a drop on another display waits for the page to take the window's new size
  * (within a pixel: fractional scales round it). The size normally arrives a frame or two after
@@ -1121,12 +1134,19 @@ const up = (e) => { pressing = false; body?.pointer('up', { x: e?.clientX ?? las
  */
 const RESIZE_WAIT_MS = 1000;
 /** Waits until the page has the window size `to` gives, or RESIZE_WAIT_MS has passed, then lays the stage out again. */
-async function settleSize(to) {
+const resizeWaits = new Set();
+async function settleSize(to, epoch = renderEpoch) {
   const t0 = performance.now();
-  while ((Math.abs(innerWidth - to.w) > 1 || Math.abs(innerHeight - to.h) > 1) && performance.now() - t0 < RESIZE_WAIT_MS) {
-    await new Promise((r) => requestAnimationFrame(r));
+  while (renderActive && epoch === renderEpoch && (Math.abs(innerWidth - to.w) > 1 || Math.abs(innerHeight - to.h) > 1) && performance.now() - t0 < RESIZE_WAIT_MS) {
+    await new Promise((resolve) => {
+      const wait = { id: null, resolve };
+      wait.id = requestAnimationFrame(() => { resizeWaits.delete(wait); resolve(); });
+      resizeWaits.add(wait);
+    });
   }
+  if (!renderActive || epoch !== renderEpoch) return false;
   body?.set({ bounds: bounds() });
+  return true;
 }
 const outside = (p) => p.x < 0 || p.y < 0 || p.x >= innerWidth || p.y >= innerHeight;
 /** A move of the window onto the display under the cursor, while one is under way. */
@@ -1138,51 +1158,62 @@ let shifting = false;
  * the held pet stays in sight instead of being cut off at the edge until it is let go of.
  */
 function followDrag(p) {
-  if (following || at()?.mode !== 'drag' || !host?.followCursor || !outside(p)) return;
+  if (!renderActive || following || at()?.mode !== 'drag' || !host?.followCursor || !outside(p)) return;
   shifting = true;
-  following = (async () => {
+  const epoch = renderEpoch, dragged = body;
+  const pending = (async () => {
     const to = await host.followCursor().catch(() => null);
+    if (!renderActive || epoch !== renderEpoch || body !== dragged) return;
     shifting = false;
     if (!to) return;
-    body?.shift(to.dx, to.dy);
-    await settleSize(to);
-  })().finally(() => { following = null; shifting = false; });
+    dragged.shift(to.dx, to.dy);
+    await settleSize(to, epoch);
+  })().finally(() => { if (following === pending) { following = null; shifting = false; } });
+  following = pending;
 }
 stage.addEventListener('pointerup', async (e) => {
+  if (!renderActive) return;
+  const epoch = renderEpoch, dragged = body;
   // the window was moving under the cursor: the release point is in the coordinates it left behind
-  if (following) { await following; up(); return; }
+  if (following) { await following; if (renderActive && epoch === renderEpoch && body === dragged) up(); return; }
   if (!outside({ x: e.clientX, y: e.clientY }) || at()?.mode !== 'drag' || !host?.followCursor) { up(e); return; }
   // let go of past the window's edge in one move: over another display the window follows and the pet drops there
   const to = await host.followCursor().catch(() => null);
+  if (!renderActive || epoch !== renderEpoch || body !== dragged) return;
   if (!to) { up(e); return; }
-  pressing = false;
+  pressing = false; capturedPointer = null;
   stage.style.cursor = '';
   // until the drop the body and bubbles still stand in the old display's coordinates
   document.body.style.visibility = 'hidden';
   try {
-    await settleSize(to);
-    body?.drop({ x: to.x, y: to.y });
+    if (await settleSize(to, epoch) && body === dragged) dragged.drop({ x: to.x, y: to.y });
   } finally {
-    document.body.style.visibility = '';
+    if (epoch === renderEpoch) document.body.style.visibility = '';
   }
 });
-stage.addEventListener('pointercancel', up);
+stage.addEventListener('pointercancel', () => {
+  pressing = false; capturedPointer = null;
+  body?.pointer('cancel', {});
+  stage.style.cursor = '';
+});
 document.addEventListener('pointerleave', (e) => {
+  if (!renderActive) return;
   cursor.at = null;
   body?.pointer('leave', { x: e.clientX, y: e.clientY, screenX: e.screenX, screenY: e.screenY });
 });
-stage.addEventListener('dblclick', (e) => { if (prefs.doubleClickChat && body?.hit({ x: e.clientX, y: e.clientY })) openInput(); });
+stage.addEventListener('dblclick', (e) => { if (renderActive && prefs.doubleClickChat && body?.hit({ x: e.clientX, y: e.clientY })) openInput(); });
 document.addEventListener('contextmenu', (e) => {
   e.preventDefault();
-  if (body?.hit({ x: e.clientX, y: e.clientY })) openMenu(e.clientX, e.clientY);
+  if (renderActive && body?.hit({ x: e.clientX, y: e.clientY })) openMenu(e.clientX, e.clientY);
 });
 document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.menu')) closeMenu(); }, { capture: true });
 // clicks off the figure pass through the window to what is underneath; the window losing focus is how they show here
 window.addEventListener('blur', closeMenu);
 document.addEventListener('focusin', (e) => {
-  if (e.target.matches?.('input, textarea')) host?.focus?.();
+  if (renderActive && e.target.matches?.('input, textarea')) host?.focus?.();
 });
 document.addEventListener('keydown', (e) => {
+  if (!renderActive) return;
   // Escape and number keys belong to the input method while choosing a candidate.
   if (e.isComposing || e.keyCode === 229) return;
   if (e.key === 'Escape') {
@@ -1292,7 +1323,9 @@ async function probeBackdrop() {
   const x = Math.max(0, far.x), y = Math.max(0, far.y);
   const rect = { x, y, width: Math.min(innerWidth, far.x + far.width) - x, height: Math.min(innerHeight, far.y + far.height) - y };
   const skip = [near, ...[bubble, heardEl, menu, tools].filter((el) => !el.hidden).map(rectOf)];
+  const epoch = renderEpoch;
   const px = await host.sampleBackdrop(rect, skip);
+  if (!renderActive || epoch !== renderEpoch) return;
   // this platform cannot read the screen cheaply: the halo just stays
   if (px === null) { backdrop.on = true; backdrop.fixed = true; return; }
   const n = px.length / 3;
@@ -1308,7 +1341,7 @@ async function probeBackdrop() {
 }
 function stepBackdrop(dt) {
   const now = performance.now() / 1000;
-  if (host?.sampleBackdrop && !backdrop.fixed && !backdrop.busy && now >= backdrop.next && document.visibilityState === 'visible') {
+  if (host?.sampleBackdrop && !backdrop.fixed && !backdrop.busy && now >= backdrop.next && renderActive) {
     backdrop.busy = true;
     probeBackdrop().catch(() => {}).finally(() => { backdrop.busy = false; backdrop.next = performance.now() / 1000 + BACKDROP_EVERY; });
   }
@@ -1325,15 +1358,12 @@ function stepBackdrop(dt) {
  * this rate; frames do not follow the display's refresh rate.
  */
 const MOVING_FPS = 60, RESTING_FPS = 30;
-/** When the next frame is due (a rAF timestamp), and the gap between frames at the current rate. */
-let last = performance.now(), dueAt = 0, gap = 1000 / MOVING_FPS;
 /** The last error the frame loop logged, so one that keeps recurring is reported once, not per frame. */
 let frameErr = null;
-function frame(now) {
-  // a display refresh up to a quarter gap early counts as on time, so the rate averages out over refresh rates it does not divide
-  if (now < dueAt - gap / 4) { requestAnimationFrame(frame); return; }
-  const dt = Math.min(.05, (now - last) / 1000); last = now;
-  try {
+const renderLoop = createFrameLoop({
+  movingFps: MOVING_FPS, restingFps: RESTING_FPS,
+  moving: () => prefs.lockFrameRate || !!at()?.moving,
+  frame(dt) {
     T += dt;
     stepActs();
     stepDialog(dt);
@@ -1345,19 +1375,46 @@ function frame(now) {
     stepBackdrop(dt);
     stepTools();
     layout();
-  } catch (err) {
-    // a throwing step must not take the loop with it: the next frame is only asked for below, and
-    // without it the pet freezes for good (a broken figure throws again on every frame it draws)
+  },
+  onError(err) {
     const msg = err?.message ?? String(err);
     if (msg !== frameErr) { frameErr = msg; console.error(err); }
+  },
+});
+
+function setRenderActive(active) {
+  if (renderActive === active) return;
+  renderActive = active;
+  renderEpoch++;
+  renderLoop.setActive(active);
+  // Never resume an old hover or complete a half-held button/drag after hiding or sleep.
+  cursor.at = null; pointerSeen = false;
+  body?.pointer('suspend', {});
+  if (!active) {
+    body?.pointer('cancel', {});
+    pressing = false;
+    if (capturedPointer !== null && stage.hasPointerCapture?.(capturedPointer)) stage.releasePointerCapture(capturedPointer);
+    capturedPointer = null;
+    stage.style.cursor = '';
+    document.body.style.visibility = '';
+    for (const wait of resizeWaits) { cancelAnimationFrame(wait.id); wait.resolve(); }
+    resizeWaits.clear();
+    following = null; shifting = false;
+    endHold(); hold.sent = true;
+    toolsUntil = 0; tools.hidden = true;
+    closeMenu(); releaseKeys(item);
+    interactive = false; host?.setInteractive(false);
+    clearTimeout(diag.timer); diag.timer = 0;
+  } else {
+    backdrop.next = 0;
+    body?.set({ bounds: bounds() });
+    if (item?.kind === 'ask' && item.optsShown && !item.answered) grabKeys(item);
   }
-  const full = prefs.lockFrameRate || !!at()?.moving;
-  gap = 1000 / (full ? MOVING_FPS : RESTING_FPS);
-  // a frame more than a gap late starts the count again instead of drawing the missed ones back to back
-  dueAt = now - dueAt > gap ? now + gap : dueAt + gap;
-  // moving frames wait on display refreshes: a timer can wake late, which a body at rest hides and a moving one shows as stutter
-  if (full) requestAnimationFrame(frame);
-  else setTimeout(() => requestAnimationFrame(frame), Math.max(0, dueAt - gap / 4 - performance.now()));
 }
-addEventListener('pagehide', reportPosition);
-requestAnimationFrame(frame);
+let nativeActive = false, pageActive = true;
+const syncRendering = () => setRenderActive(pageActive && (host?.onRenderState ? nativeActive : !document.hidden));
+host?.onRenderState?.((state) => { nativeActive = state?.active === true; syncRendering(); });
+document.addEventListener('visibilitychange', syncRendering);
+addEventListener('pagehide', () => { reportPosition(); pageActive = false; syncRendering(); });
+addEventListener('pageshow', () => { pageActive = true; syncRendering(); });
+renderLoop.setActive(renderActive);

@@ -45,6 +45,7 @@ import { mountRelease } from './features/release.ts';
 import { onModeRequest, readMode, writeMode, type ConsoleMode } from './features/mode.ts';
 import { icon } from './ui/icons.ts';
 import { coopanionWordmark } from './branding.ts';
+import { installSettingsLifecycle } from './settings-lifecycle.ts';
 import type { ConsoleMemo } from '../shared/client-panel.ts';
 
 /**
@@ -196,8 +197,14 @@ export function boot(doc: Document = document): { dispose(): void } {
   let capabilities: Record<string, boolean> = {};
   /** capabilities 与 manifest 都到齐了吗。到齐之前不渲染任何一页。 */
   let ready = false;
+  let featureReady = false;
   /** 到齐之前就 dispose 了:那一拍回来什么都不做。 */
   let disposed = false;
+  const settingsLifecycle = installSettingsLifecycle(doc, {
+    ready: () => ready && featureReady && !disposed,
+    route: () => router.route.segments[0],
+    router,
+  });
 
   /**
    * 左栏外壳。它自己不探活、不认识任何具体 World:框架页那段由 FEATURES 按
@@ -276,6 +283,7 @@ export function boot(doc: Document = document): { dispose(): void } {
   let generation = 0;
 
   const unmountFeature = (): void => {
+    featureReady = false;
     const cur = mounted;
     mounted = null;
     generation++;
@@ -309,6 +317,7 @@ export function boot(doc: Document = document): { dispose(): void } {
           return;
         }
         if (out && typeof out.dispose === 'function') lifecycle.own(out);
+        featureReady = true;
       } catch (err) {
         if (gen !== generation) return;
         onError(err);
@@ -381,6 +390,7 @@ export function boot(doc: Document = document): { dispose(): void } {
   return {
     dispose(): void {
       disposed = true;
+      settingsLifecycle.dispose();
       offNav.dispose();
       shellLife.dispose();
       offRoute.dispose();

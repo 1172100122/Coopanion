@@ -71,13 +71,15 @@ addEventListener('message', async (e) => {
       const base = new URL(m.base);
       body = await make(base, { model: m.model ?? undefined, scheme: m.scheme, kit, loadImage, asset: (p) => new URL(p, base), host: { ...host, start: m.start } });
       for (const fn of ['step', 'layout', 'do']) if (typeof body?.[fn] !== 'function') throw new Error(`形象没有 ${fn}`);
-      post({ t: 'ready', z: body.z ?? null });
+      post({ t: 'ready', z: body.z ?? null, localHalo: typeof body.setHalo === 'function' });
     } else if (!body) {
       // calls that come before the body is ready have nothing to act on
     } else if (m.t === 'tick') {
       body.step(m.dt);
       post({ t: 'frame', layout: body.layout(), events, sounds, z: body.z ?? null });
       events = []; sounds = [];
+    } else if (m.t === 'halo') {
+      body.setHalo?.(Math.max(0, Math.min(1, Number(m.k) || 0)));
     } else if (m.t === 'scheme') {
       await body.setScheme?.(m.id, { fade: m.fade, at: m.at });
       post({ t: 'scheme', seq: m.seq, z: body.z ?? null });

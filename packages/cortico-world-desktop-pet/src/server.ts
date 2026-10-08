@@ -84,6 +84,11 @@ export class PetServer {
     return this.pet !== null && this.pet.readyState === this.pet.OPEN;
   }
 
+  /** A browser tab is a pet client too, but cannot reveal an Electron window. */
+  get petWindowConnected(): boolean {
+    return this.petConnected && this.petIsWindow;
+  }
+
   async start(): Promise<number> {
     const base = this.opts.port();
     let lastErr: Error | null = null;

@@ -728,7 +728,7 @@ export function createPet(els, opts) {
     gaze?.observe(p, hitPet(p));
     if (gaze) Object.assign(gazePoint, { x: p.x, y: p.y, inside: true });
     const t = now(p);
-    const wasOver = hitPet(pointer);
+    const wasInside = pointer.inside, wasOver = wasInside && hitPet(pointer);
     const ddx = p.x - pointer.x, ddy = p.y - pointer.y;
     Object.assign(pointer, { x: p.x, y: p.y, inside: true });
     pointer.samples.push({ t, x: p.x, y: p.y });
@@ -746,8 +746,9 @@ export function createPet(els, opts) {
     if (press) return (pet.cursor = 'grabbing');
     const over = hitPet(p);
     if (over && ['idle', 'look', 'sit', 'sleep'].includes(pet.mode)) {
-      // Entering from an unknown/far-away cursor is a glance, not a giant first petting stroke.
-      strokeAcc += gaze && !wasOver ? 0 : Math.hypot(ddx, ddy);
+      // Baseline the first observation after entry/cancellation for every figure. Coordinates
+      // retained across hiding are not a petting stroke; bounded-gaze figures also baseline body entry.
+      strokeAcc += !wasInside || (gaze && !wasOver) ? 0 : Math.hypot(ddx, ddy);
       if (strokeAcc > 320 && petCool <= 0) {
         strokeAcc = 0; petCool = 2.5;
         play('purr', 'touch');
@@ -788,6 +789,20 @@ export function createPet(els, opts) {
       }
     }
     press = null;
+  }
+  /** Cancel lost/hidden pointer input silently; a cancellation is neither a poke nor a throw. */
+  function pointerCancel() {
+    press = null;
+    pointer.inside = false; pointer.samples = []; pointer.vx = 0;
+    strokeAcc = 0; pet.cursor = '';
+    gaze?.suspend(); gazePoint.inside = false;
+    if (pet.mode !== 'drag') return;
+    const foot = toStage(128, 256);
+    pet.x = clamp(foot.x, minX(), maxX());
+    pet.fy = Math.min(floorY, foot.y);
+    pet.vx = 0; pet.vy = 0;
+    pet.airKind = 'drop';
+    setMode('air');
   }
   /**
    * Ends a drag with the body dropped from under stage point `p` with no throw: the pointer was let
@@ -857,7 +872,7 @@ export function createPet(els, opts) {
   if (gaze) render(); // The initial passive cursor baseline needs the real hit geometry.
   return {
     pet, step, render, resize, act, setExpr, doWord, walkTo, stopWalk, toStage, hitPet, busy, layout,
-    pointerDown, pointerMove, pointerUp, pointerLeave, pointerCursor, suspendGaze: () => gaze?.suspend(), dropAt, shiftDrag,
+    pointerDown, pointerMove, pointerUp, pointerCancel, pointerLeave, pointerCursor, suspendGaze: () => gaze?.suspend(), dropAt, shiftDrag,
     get pressing() { return !!press; },
     /** Pressed, carried, airborne, walking, running, dancing, turning round, or in a short gesture (nod, wave, bow…): motion that frames far apart show as jumps. */
     get moving() {
@@ -925,9 +940,12 @@ export function createBody(host, opts) {
   const svg = doc.createElementNS(SVGNS, 'svg');
   svg.setAttribute('class', 'kit');
   svg.setAttribute('aria-hidden', 'true');
-  svg.innerHTML = '<ellipse class="shadow" cx="0" cy="0" rx="0" ry="0"/><g></g><g></g>';
+  // Filter just the painted body/effects, not the transparent full-screen iframe. This
+  // untransformed group keeps the halo's radii in stage pixels at every pet scale.
+  svg.innerHTML = '<g class="kit-halo"><ellipse class="shadow" cx="0" cy="0" rx="0" ry="0"/><g></g><g></g></g>';
   host.root.appendChild(svg);
-  const [shadowEl, petG, fxG] = svg.children;
+  const haloGroup = svg.firstElementChild;
+  const [shadowEl, petG, fxG] = haloGroup.children;
   const skinStyle = doc.createElement('style');
   doc.head.appendChild(skinStyle);
   const start = host.start ?? {};
@@ -944,6 +962,10 @@ export function createBody(host, opts) {
   if (start.facing === 1 || start.facing === -1) ctl.pet.facing = ctl.pet.faceVis = start.facing;
   return {
     step(dt) { ctl.step(dt); ctl.render(); },
+    setHalo(k) {
+      const c = `rgba(184,184,184,${k.toFixed(2)})`;
+      haloGroup.style.filter = k ? `drop-shadow(0 0 3px ${c}) drop-shadow(0 0 7px ${c})` : '';
+    },
     layout: ctl.layout,
     resize: ctl.resize,
     do: ctl.doWord,
@@ -952,7 +974,8 @@ export function createBody(host, opts) {
     pointer(type, p) {
       if (type === 'down') ctl.pointerDown(p);
       else if (type === 'move') ctl.pointerMove(p);
-      else if (type === 'up' || type === 'cancel') ctl.pointerUp(p);
+      else if (type === 'up') ctl.pointerUp(p);
+      else if (type === 'cancel') ctl.pointerCancel();
       else if (type === 'leave') ctl.pointerLeave(p);
       else if (type === 'cursor') ctl.pointerCursor(p);
       else if (type === 'suspend') ctl.suspendGaze();

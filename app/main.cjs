@@ -103,6 +103,7 @@ if (!app.requestSingleInstanceLock()) {
 
 const { CoreHost } = require('./core-host.cjs');
 const { RELEASES_URL, startUpdater } = require('./updater.cjs');
+const { SettingsWindow } = require('./settings-window.cjs');
 
 const userData = app.getPath('userData');
 const shimDir = join(__dirname, 'shims');
@@ -131,7 +132,6 @@ const core = new CoreHost({
   },
 });
 
-let settings = null;
 let tray = null;
 let quitting = false;
 let updater = null;
@@ -145,43 +145,33 @@ function loadingPage(text) {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
-function openSettings(path = '') {
-  // a menu-bar app shows in the Dock only while it has a window to switch to
-  if (MAC) void app.dock?.show();
-  if (settings) {
-    if (settings.isMinimized()) settings.restore();
-    settings.show();
-    settings.focus();
-    const url = consoleUrl(path);
-    if (url && path) settings.loadURL(url);
-    return;
-  }
-  settings = new BrowserWindow({
+const settings = new SettingsWindow({
+  createWindow: (options) => new BrowserWindow(options),
+  windowOptions: {
     width: 1180, height: 800, minWidth: 880, minHeight: 600,
     title: 'Coopanion', icon: join(ICONS, 'icon.png'), autoHideMenuBar: true, show: false,
     backgroundColor: '#f4f5f4',
     webPreferences: { contextIsolation: true, sandbox: true, spellcheck: false },
-  });
-  settings.once('ready-to-show', () => settings.show());
-  settings.on('page-title-updated', (e) => e.preventDefault());
-  settings.webContents.setWindowOpenHandler(({ url }) => {
-    const origin = core.port ? `http://127.0.0.1:${core.port}` : null;
-    const local = /^http:\/\/(127\.0\.0\.1|localhost):\d+\//.test(url);
-    if (local) return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, icon: join(ICONS, 'icon.png') } };
-    if (origin && url.startsWith(origin)) return { action: 'allow' };
-    shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  settings.on('close', (e) => {
-    if (quitting) return;
-    e.preventDefault();
-    settings.hide();
-    if (MAC) app.dock?.hide();
-  });
-  settings.on('closed', () => { settings = null; });
-  const url = consoleUrl(path);
-  settings.loadURL(url ?? loadingPage('正在启动…'));
-}
+  },
+  consoleUrl,
+  loadingUrl: () => loadingPage('正在启动…'),
+  onShow: () => { if (MAC) void app.dock?.show(); },
+  onHide: () => { if (MAC) app.dock?.hide(); },
+  isQuitting: () => quitting,
+  configureWindow: (win) => {
+    win.on('page-title-updated', (e) => e.preventDefault());
+    win.webContents.setWindowOpenHandler(({ url }) => {
+      const origin = core.port ? `http://127.0.0.1:${core.port}` : null;
+      const local = /^http:\/\/(127\.0\.0\.1|localhost):\d+\//.test(url);
+      if (local) return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, icon: join(ICONS, 'icon.png') } };
+      if (origin && url.startsWith(origin)) return { action: 'allow' };
+      shell.openExternal(url);
+      return { action: 'deny' };
+    });
+  },
+});
+
+const openSettings = (path = '') => settings.open(path);
 
 /** Calls a panel method of a World page through the console API. */
 async function panel(pageId, panelId, method) {
@@ -192,14 +182,12 @@ async function panel(pageId, panelId, method) {
 }
 
 async function showPet() {
-  await panel('world:desktop-pet', 'pet', 'closeWindow');
-  await panel('world:desktop-pet', 'pet', 'openWindow');
+  await panel('world:desktop-pet', 'pet', 'showWindow');
 }
 
-/** Brings the pet back unless its page is on screen already (reopening it would make it blink). */
+/** Reveals an existing hidden pet without replacing its renderer or pending conversations. */
 async function ensurePet() {
-  const state = await panel('world:desktop-pet', 'pet', 'state').catch(() => null);
-  if (!state?.connected) await showPet();
+  await showPet();
 }
 
 /**
@@ -249,7 +237,7 @@ function buildTray() {
 }
 
 core.on('ready', () => {
-  if (settings) settings.loadURL(consoleUrl());
+  settings.reload();
   if (updateStep) core.send(updateStep);
 });
 core.on('update-install', () => updater?.installNow());
@@ -262,11 +250,7 @@ core.on('state', (state, detail) => {
 
 core.on('open', (path) => openSettings(path));
 // the introduction runs again on the desktop, where Coo is
-core.on('hide', () => {
-  if (!settings) return;
-  settings.hide();
-  if (MAC) app.dock?.hide();
-});
+core.on('hide', () => settings.hide());
 core.on('quit', () => app.quit());
 const bringBack = () => { if (core.state === 'running') ensurePet().catch(() => { /* Core went away meanwhile */ }); };
 app.on('second-instance', bringBack);
@@ -276,6 +260,7 @@ app.on('window-all-closed', () => { /* stays in the tray */ });
 app.on('before-quit', (e) => {
   if (quitting) return;
   quitting = true;
+  settings.dispose();
   e.preventDefault();
   void core.stop().finally(() => {
     // a downloaded update installs now; its quit comes back here with quitting set and goes through

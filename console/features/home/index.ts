@@ -2,7 +2,7 @@
  * 「开始」: the app's home page. Everything the first minutes need on one page, top to bottom in
  * the order it is needed: the model service and its key (a row of services with their logos,
  * DeepSeek first; the key is saved to that service's own endpoint, tested, the endpoint made active
- * and the run resumed), then the pet (live preview, show, a button to the dressing page). Dressing up,
+ * and the run resumed), then the pet (static avatar, show, a link to the live dressing preview). Dressing up,
  * voice input and computer use have their own pages (features/dress, features/voice, features/cua); the link
  * to other model services shows with or without a key, and in the normal mode asks before it
  * switches to the advanced mode, where the model pages are; 「使用引导」 at the top has Hachimist run its
@@ -16,6 +16,7 @@ import { pick } from '../../core/language.ts';
 import type { FeatureContext, FrameworkFeature } from '../feature.ts';
 import { readMode, requestMode } from '../mode.ts';
 import { connectVendor, consoleCall, readStatus, testEndpoint, VENDOR_ICONS, VENDORS, vendorOf, type ConnectResult, type Status, type Vendor } from './model.ts';
+import { createPetPreview } from './preview.ts';
 
 const PET_PAGE = 'world:desktop-pet';
 
@@ -48,6 +49,7 @@ const S = pick({
     petHidden: '没有显示',
     showPet: '显示桌宠',
     dress: '装扮',
+    preview: '打开装扮预览',
     petNote: '鼠标停在桌宠身上会出现打字和麦克风两个按钮;右键打开菜单;按住可以拎起来。',
     guide: '使用引导',
     guideHint: '让 Hachimist 在屏幕底边再带你走一遍',
@@ -80,13 +82,14 @@ const S = pick({
     petHidden: 'Not shown',
     showPet: 'Show pet',
     dress: 'Dress up',
+    preview: 'Open dressing preview',
     petNote: 'Hover the pet for the typing and microphone buttons; right-click for the menu; hold it to pick it up.',
     guide: 'Guide',
     guideHint: 'Hachimist walks you through it again at the bottom of the screen',
   },
 });
 
-interface PetState { connected: boolean; url: string | null }
+interface PetState { connected: boolean }
 
 const panelPath = (page: string, panel: string, method: string) => `/api/console/providers/${encodeURIComponent(page)}/panels/${panel}/${method}`;
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -188,8 +191,7 @@ async function mount(ctx: FeatureContext): Promise<void> {
   const showPet = ui.button(S.showPet, { size: 'sm' });
   const dress = ui.button(S.dress, { size: 'sm', variant: 'primary' });
   petLine.append(petPill, ui.h('span', 'grow'), showPet, dress);
-  const preview = ui.h('iframe', 'home-petframe');
-  preview.title = S.petTitle;
+  const preview = createPetPreview(root.ownerDocument, S.preview, () => ctx.router.navigate(['dress']), signal);
   pet.body.append(petLine, preview, ui.h('p', 'home-note', S.petNote));
   root.append(pet.el);
 
@@ -263,10 +265,6 @@ async function mount(ctx: FeatureContext): Promise<void> {
     } catch { petState = null; }
     petPill.textContent = petState?.connected ? S.petShown : S.petHidden;
     petPill.className = `pill ${petState?.connected ? 'on' : 'plain'}`;
-    if (petState?.url && preview.dataset.src !== petState.url) {
-      preview.dataset.src = petState.url;
-      preview.src = petState.url;
-    }
   };
   showPet.addEventListener('click', async () => {
     await post(panelPath(PET_PAGE, 'pet', 'closeWindow'), { args: [] }, opts).catch(() => null);
@@ -276,7 +274,13 @@ async function mount(ctx: FeatureContext): Promise<void> {
   dress.addEventListener('click', () => ctx.router.navigate(['dress']));
 
   await Promise.all([refreshModel(), refreshPet()]);
-  ctx.lifecycle.interval(() => { void refreshModel(); void refreshPet(); }, 2000);
+  const refreshVisible = () => {
+    if (root.ownerDocument.hidden || signal.aborted) return;
+    void refreshModel();
+    void refreshPet();
+  };
+  ctx.lifecycle.interval(refreshVisible, 2000);
+  root.ownerDocument.addEventListener('visibilitychange', refreshVisible, opts);
 }
 
 export const homeFeature: FrameworkFeature = {
